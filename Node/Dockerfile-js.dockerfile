@@ -1,0 +1,17 @@
+# Usar imagen oficial de Node.js
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Instalar dependencias primero para aprovechar el cache de Docker
+COPY package.json ./
+RUN npm install --production
+
+# Copiar el servidor y el archivo HTML
+COPY server.js .
+COPY index.html .
+
+# Exponer el puerto que usará Node
+EXPOSE 80
+
+CMD ["npm", "start"]
