@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 80;
 // Configuración del Proxy para la API
 // Redirige todo lo que llegue a /api hacia el contenedor 'backend'
 app.use('/api', createProxyMiddleware({
-    target: 'http://backend:5000',
+    target: 'http://crmasesorasapi.libresdeumas.com',
     changeOrigin: true,
     pathRewrite: {
         '^/api': '/api', // Mantiene el prefijo /api
@@ -35,5 +35,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Servidor Node.js activo en puerto ${PORT}`);
-    console.log(`Proxy configurado: /api -> http://backend:5000`);
+    console.log(`Proxy configurado: /api -> http://crmasesorasapi.libresdeumas.com`);
 });
