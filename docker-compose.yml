@@ -1,11 +1,36 @@
 version: '3.8'
 
 services:
-  # Servicio del Backend (Flask)
+  # Servidor de API (Python/Flask)
   backend:
-    build: .
-    container_name: crm_backend
+    build:
+      context: ./Python
+      dockerfile: Dockerfile
+    container_name: crm_backend_api
     restart: always
+    # Carga las variables de Google (PROJECT_ID, PRIVATE_KEY, etc.)
     env_file:
       - .env
-    # El puerto 5000 no se expone al público, solo a Nginx internamente
+    # Puerto interno para comunicación con el frontend
+    expose:
+      - "5000"
+
+  # Servidor Web (Node.js) - Punto de entrada
+  frontend:
+    build:
+      context: ./Node/
+      dockerfile: Dockerfile-js
+    container_name: crm_frontend_node
+    restart: always
+    ports:
+      - "8080:80" # Tu reverse proxy externo debe apuntar aquí
+    depends_on:
+      - backend
+    # Opcional: Si necesitas pasar variables al frontend
+    environment:
+      - NODE_ENV=production
+      - PORT=80
+
+networks:
+  default:
+    name: crm_network
