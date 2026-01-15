@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  # Servicio del Backend (Flask)
+  backend:
+    build: .
+    container_name: crm_backend
+    restart: always
+    env_file:
+      - .env
+    # El puerto 5000 no se expone al público, solo a Nginx internamente
