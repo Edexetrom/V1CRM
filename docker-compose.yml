@@ -12,7 +12,7 @@ services:
     env_file:
       - .env
     # Puerto interno para comunicación con el frontend
-    expose:
+    ports:
       - "5000"
 
   # Servidor Web (Node.js) - Punto de entrada
@@ -23,7 +23,7 @@ services:
     container_name: crm_frontend_node
     restart: always
     ports:
-      - "8080:80" # Tu reverse proxy externo debe apuntar aquí
+      - "80" # Tu reverse proxy externo debe apuntar aquí
     depends_on:
       - backend
     # Opcional: Si necesitas pasar variables al frontend
