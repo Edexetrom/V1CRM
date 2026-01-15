@@ -18,7 +18,7 @@ services:
   # Servidor Web (Node.js) - Punto de entrada
   frontend:
     build:
-      context: ./Node/
+      context: ./Node
       dockerfile: Dockerfile-js
     container_name: crm_frontend_node
     restart: always
