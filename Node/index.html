@@ -73,14 +73,14 @@
             }, []);
 
             const fetchAgents = async () => {
-                const res = await fetch('http://localhost:5000/api/agents');
+                const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents');
                 const data = await res.json();
                 setAgents(data);
             };
 
             const fetchClients = async (name) => {
                 setLoading(true);
-                const res = await fetch(`http://localhost:5000/api/clients?asesora=${name}`);
+                const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${name}`);
                 const data = await res.json();
                 setClients(data);
                 setLoading(false);
@@ -88,7 +88,7 @@
 
             const handleLogin = async (name, password) => {
                 setLoading(true);
-                const res = await fetch('http://localhost:5000/api/login', {
+                const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nombre: name, password })
@@ -242,7 +242,7 @@
                 e.preventDefault();
                 if (form.Canal.length !== 10) return alert("Teléfono debe ser de 10 dígitos.");
                 setSending(true);
-                const res = await fetch('http://localhost:5000/api/add-client', {
+                const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/add-client', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ...form, file_payload: file })
@@ -332,7 +332,7 @@
                     updates[`Notas Seguimiento ${n}`] = local[`Notas Seguimiento ${n}`];
                 }
 
-                const res = await fetch('http://localhost:5000/api/update-client-advanced', {
+                const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ nombre_original: client.Nombre, updates, file_payload: photo })
