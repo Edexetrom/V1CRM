@@ -5,16 +5,18 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 80;
 
-// Configuración del Proxy para la API
-// Redirige todo lo que llegue a /api hacia el contenedor 'backend'
+/**
+ * CONFIGURACIÓN DEL PROXY PARA LA API
+ * Redirige las peticiones /api al contenedor de Python (backend)
+ */
 app.use('/api', createProxyMiddleware({
     target: 'http://crmasesorasapi.libresdeumas.com',
     changeOrigin: true,
     pathRewrite: {
-        '^/api': '/api', // Mantiene el prefijo /api
+        '^/api': '/api',
     },
     onProxyReq: (proxyReq, req, res) => {
-        // Ajuste para manejar cuerpos de petición grandes (imágenes)
+        // Manejo de cuerpos de petición grandes para imágenes
         if (req.body) {
             let bodyData = JSON.stringify(req.body);
             proxyReq.setHeader('Content-Type', 'application/json');
@@ -24,16 +26,42 @@ app.use('/api', createProxyMiddleware({
     }
 }));
 
-// Servir archivos estáticos
-// Buscamos el index.html en la raíz del directorio
+/**
+ * LÓGICA DE ENRUTAMIENTO POR DOMINIO
+ * Detecta el host para servir el CRM de Asesoras o el de Auditores
+ */
+app.get('/', (req, res) => {
+    const host = req.headers.host;
+
+    if (host && host.includes('crmauditores.libresdeumas.com')) {
+        // Si el dominio es de auditores, sirve audit.html
+        res.sendFile(path.join(__dirname, 'audit.html'));
+    } else {
+        // Por defecto (o si es crmasesoras), sirve index.html
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
+});
+
+/**
+ * SERVICIO DE ARCHIVOS ESTÁTICOS
+ */
 app.use(express.static(path.join(__dirname, '.')));
 
-// Cualquier otra ruta sirve el index.html (soporte para Single Page Apps)
+/**
+ * SOPORTE PARA REFRESH (CATCH-ALL)
+ * Repite la lógica del host para que las rutas internas funcionen
+ */
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    const host = req.headers.host;
+    if (host && host.includes('crmauditores.libresdeumas.com')) {
+        res.sendFile(path.join(__dirname, 'audit.html'));
+    } else {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor Node.js activo en puerto ${PORT}`);
-    console.log(`Proxy configurado: /api -> http://crmasesorasapi.libresdeumas.com`);
+    console.log(`Servidor Multi-CRM activo en puerto ${PORT}`);
+    console.log(`Asesoras: crmasesoras.libresdeumas.com`);
+    console.log(`Auditores: crmauditores.libresdeumas.com`);
 });
