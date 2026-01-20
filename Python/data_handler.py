@@ -12,18 +12,16 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class DataHandler:
-    # Configuración de URLs y Drive
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
+    SHEET_URL = "https://docs.google.com/spreadsheets/d/1PGyE1TN5q1tEtoH5A-wxqS27DkONkNzp-hreL3OMJZw/edit#gid=0"
 
     def __init__(self):
         self.client = None
         self.workbook = None
-        self.SHEET_URL = "https://docs.google.com/spreadsheets/d/1PGyE1TN5q1tEtoH5A-wxqS27DkONkNzp-hreL3OMJZw/edit#gid=0"
         self.connect()
 
     def connect(self):
-        """Conexión robusta a Google Sheets usando Service Account b64"""
         try:
             creds_b64 = os.getenv("GOOGLE_CREDS_BASE64")
             if creds_b64:
@@ -32,24 +30,19 @@ class DataHandler:
                 info = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
                 self.client = gspread.service_account_from_dict(info)
                 self.workbook = self.client.open_by_url(self.SHEET_URL)
-                logger.info("Conexión exitosa a Google Sheets")
+                logger.info("Conexión Sheets Exitosa (Restauración 2.1)")
         except Exception as e:
-            logger.error(f"Error crítico de conexión: {e}")
+            logger.error(f"Error de conexión: {e}")
 
     def _normalize(self, text):
-        """Normaliza texto para comparaciones robustas (sin acentos, minúsculas, sin espacios extra)"""
         if not text: return ""
         text = str(text).lower().strip()
         text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
-        # Eliminar caracteres no alfanuméricos para máxima resiliencia en encabezados
         return "".join(e for e in text if e.isalnum())
 
     def _ensure_columns(self, sheet, headers, required_columns):
-        """Asegura que las columnas necesarias existan en la hoja"""
         updated_headers = list(headers)
         new_cols = []
-        
-        # Mapeo de búsqueda normalizada para evitar duplicados por formato
         norm_headers = [self._normalize(h) for h in updated_headers]
         
         for col in required_columns:
@@ -59,16 +52,19 @@ class DataHandler:
                 norm_headers.append(self._normalize(col))
         
         if new_cols:
-            logger.info(f"Auto-expansión: Agregando columnas {new_cols}")
             sheet.update('A1', [updated_headers])
             return updated_headers
         return headers
 
     def get_active_agents(self):
         try:
-            sheet = self.workbook.worksheet("AsesorasActivas")
-            return sheet.get_all_records()
+            return self.workbook.worksheet("AsesorasActivas").get_all_records()
         except: return []
+
+    def set_agent_password(self, name, password):
+        sheet = self.workbook.worksheet("AsesorasActivas")
+        cell = sheet.find(name)
+        if cell: sheet.update_cell(cell.row, 2, password)
 
     def get_clients_for_agent(self, agent_name):
         try:
@@ -77,14 +73,13 @@ class DataHandler:
             return [row for row in all_data if str(row.get('Asesora', '')).lower() == agent_name.lower()]
         except: return []
 
-    def add_new_client(self, data, file_payload):
-        """Registra un nuevo cliente con mapeo de columnas inteligente"""
+    def add_new_client(self, data, files_payload):
+        """Alta con procesamiento de múltiples imágenes acumuladas"""
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             headers = sheet.row_values(1)
             
-            # Definir qué campo del JSON va a qué columna de la hoja
-            data_map = {
+            row_map = {
                 'Nombre': data.get('Nombre'),
                 'Canal (Tel/WhatsApp)': data.get('Canal'),
                 'Fecha 1er Contacto': data.get('Fecha 1er Contacto'),
@@ -96,76 +91,69 @@ class DataHandler:
                 'Comentarios': data.get('Comentarios', '')
             }
 
-            # Asegurar que las columnas básicas existan
-            headers = self._ensure_columns(sheet, headers, data_map.keys())
+            headers = self._ensure_columns(sheet, headers, row_map.keys())
 
             folder_url = ""
-            if file_payload and file_payload.get('base64Data'):
-                res = self._send_to_script(data['Nombre'], file_payload, "Inicio")
-                if res and res.get('status') == 'success':
-                    folder_url = res.get('folderUrl', '')
-                    data_map['Imagenes'] = folder_url
+            if files_payload:
+                for i, file in enumerate(files_payload):
+                    res = self._send_to_script(data['Nombre'], file, f"Inicio_{i}")
+                    if res and res.get('status') == 'success' and not folder_url:
+                        folder_url = res.get('folderUrl', '')
+                
+                if folder_url:
+                    row_map['Imagenes'] = folder_url
 
-            # Construir la fila emparejando por normalización
             new_row = []
             for h in headers:
                 norm_h = self._normalize(h)
-                found_val = ""
-                for key, val in data_map.items():
-                    if self._normalize(key) == norm_h:
-                        found_val = val
-                        break
-                new_row.append(str(found_val))
+                val = next((v for k, v in row_map.items() if self._normalize(k) == norm_h), "")
+                new_row.append(str(val))
 
             sheet.append_row(new_row)
             return True
         except Exception as e:
-            logger.error(f"Error al agregar cliente: {e}")
+            logger.error(f"Error add_client: {e}")
             return False
 
     def update_client_advanced(self, data):
-        """Actualiza expediente con mapeo de columnas inteligente"""
+        """Actualización multi-imagen con columnas dinámicas"""
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             headers = sheet.row_values(1)
             name = data.get('nombre_original')
-            
             cell = sheet.find(name)
             if not cell: return False
             
             row_idx = cell.row
-            final_updates = data.get('updates', {})
-            file_payload = data.get('file_payload')
+            updates = data.get('updates', {})
+            files_payload = data.get('files_payload', [])
 
-            # Asegurar que las nuevas columnas (seguimientos extra) existan
-            headers = self._ensure_columns(sheet, headers, final_updates.keys())
+            headers = self._ensure_columns(sheet, headers, updates.keys())
 
-            if file_payload and file_payload.get('base64Data'):
-                res = self._send_to_script(name, file_payload, datetime.now().strftime("%H%M%S"))
-                if res and res.get('status') == 'success':
-                    final_updates['Imagenes'] = res.get('folderUrl')
-
-            batch_list = []
-            for key, value in final_updates.items():
-                norm_key = self._normalize(key)
-                # Buscar el índice de la columna mediante normalización
-                col_i = next((i + 1 for i, h in enumerate(headers) if self._normalize(h) == norm_key), None)
+            if files_payload:
+                folder_url = ""
+                for i, file in enumerate(files_payload):
+                    res = self._send_to_script(name, file, datetime.now().strftime("%H%M%S") + f"_{i}")
+                    if res and res.get('status') == 'success' and not folder_url:
+                        folder_url = res.get('folderUrl', '')
                 
+                if folder_url:
+                    updates['Imagenes'] = folder_url
+
+            batch = []
+            for k, v in updates.items():
+                norm_k = self._normalize(k)
+                col_i = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(k)), None)
                 if col_i:
-                    batch_list.append({
-                        'range': gspread.utils.rowcol_to_a1(row_idx, col_i),
-                        'values': [[str(value)]]
-                    })
+                    batch.append({'range': gspread.utils.rowcol_to_a1(row_idx, col_i), 'values': [[str(v)]]})
             
-            if batch_list:
-                sheet.batch_update(batch_list)
+            if batch: sheet.batch_update(batch)
             return True
         except Exception as e:
-            logger.error(f"Error actualizando expediente: {e}")
+            logger.error(f"Error update: {e}")
             return False
 
     def _send_to_script(self, client_name, file_payload, suffix):
-        """Conexión con Apps Script para almacenamiento en Drive"""
         try:
             payload = {
                 "parentFolderId": self.PARENT_FOLDER_ID,
@@ -174,6 +162,5 @@ class DataHandler:
                 "contentType": file_payload.get('contentType', 'image/png'),
                 "base64Data": file_payload.get('base64Data')
             }
-            r = requests.post(self.SCRIPT_URL, json=payload, timeout=25)
-            return r.json()
+            return requests.post(self.SCRIPT_URL, json=payload, timeout=25).json()
         except: return None
