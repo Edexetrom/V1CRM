@@ -10,6 +10,8 @@ RUN npm install --production
 # Copiar el servidor y el archivo HTML
 COPY server.js .
 COPY index.html .
+COPY index.html .
+
 
 # Exponer el puerto que usará Node
 EXPOSE 80

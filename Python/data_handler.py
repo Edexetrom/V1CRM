@@ -5,6 +5,7 @@ import base64
 import requests
 import unicodedata
 import logging
+import re
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -12,6 +13,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class DataHandler:
+    """
+    Versión 4.6: Manejador centralizado.
+    Soporta Panel de Asesoras (Alta/Update) y Panel de Auditoría (Filtros/Borrado).
+    """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
     SHEET_URL = "https://docs.google.com/spreadsheets/d/1PGyE1TN5q1tEtoH5A-wxqS27DkONkNzp-hreL3OMJZw/edit#gid=0"
@@ -30,55 +35,66 @@ class DataHandler:
                 info = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
                 self.client = gspread.service_account_from_dict(info)
                 self.workbook = self.client.open_by_url(self.SHEET_URL)
-                logger.info("Conexión Sheets Exitosa (Restauración 2.1)")
+                logger.info("Conexión Sheets OK - Versión 4.6")
         except Exception as e:
-            logger.error(f"Error de conexión: {e}")
+            logger.error(f"Error conexión: {e}")
 
-    def _normalize(self, text):
-        if not text: return ""
-        text = str(text).lower().strip()
-        text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
-        return "".join(e for e in text if e.isalnum())
-
-    def _ensure_columns(self, sheet, headers, required_columns):
-        updated_headers = list(headers)
-        new_cols = []
-        norm_headers = [self._normalize(h) for h in updated_headers]
-        
-        for col in required_columns:
-            if self._normalize(col) not in norm_headers:
-                new_cols.append(col)
-                updated_headers.append(col)
-                norm_headers.append(self._normalize(col))
-        
-        if new_cols:
-            sheet.update('A1', [updated_headers])
-            return updated_headers
-        return headers
-
-    def get_active_agents(self):
-        try:
-            return self.workbook.worksheet("AsesorasActivas").get_all_records()
+    # --- AUDITORÍA ---
+    def get_auditors(self):
+        try: return self.workbook.worksheet("Auditores").get_all_records()
         except: return []
 
-    def set_agent_password(self, name, password):
-        sheet = self.workbook.worksheet("AsesorasActivas")
-        cell = sheet.find(name)
-        if cell: sheet.update_cell(cell.row, 2, password)
+    def get_all_clients(self):
+        try: return self.workbook.worksheet("Seguimientos").get_all_records()
+        except: return []
+
+    def delete_client_and_folder(self, name):
+        """Elimina fila y manda petición de borrado de ID a Drive."""
+        try:
+            sheet = self.workbook.worksheet("Seguimientos")
+            headers = sheet.row_values(1)
+            norm_headers = [self._normalize(h) for h in headers]
+            cell = sheet.find(name)
+            if not cell: return False
+            
+            row_idx = cell.row
+            row_data = sheet.row_values(row_idx)
+            
+            # Buscar ID de Drive en columna imágenes
+            img_col_idx = next((i for i, h in enumerate(norm_headers) if "imagen" in h), None)
+            if img_col_idx is not None and img_col_idx < len(row_data):
+                url = row_data[img_col_idx]
+                match = re.search(r'([a-zA-Z0-9\-_]{25,50})', url)
+                if match:
+                    id_drive = match.group(1)
+                    logger.info(f"Enviando solicitud de borrado a Drive para ID: {id_drive}")
+                    try:
+                        requests.post(self.SCRIPT_URL, json={"action": "delete", "folderId": id_drive}, timeout=20)
+                    except Exception as err:
+                        logger.error(f"Fallo contactando Script: {err}")
+
+            sheet.delete_rows(row_idx)
+            return True
+        except Exception as e:
+            logger.error(f"Error borrado: {e}")
+            return False
+
+    # --- ASESORAS ---
+    def get_active_agents(self):
+        try: return self.workbook.worksheet("AsesorasActivas").get_all_records()
+        except: return []
 
     def get_clients_for_agent(self, agent_name):
         try:
             sheet = self.workbook.worksheet("Seguimientos")
-            all_data = sheet.get_all_records()
-            return [row for row in all_data if str(row.get('Asesora', '')).lower() == agent_name.lower()]
+            data = sheet.get_all_records()
+            return [row for row in data if str(row.get('Asesora', '')).lower() == agent_name.lower()]
         except: return []
 
     def add_new_client(self, data, files_payload):
-        """Alta con procesamiento de múltiples imágenes acumuladas"""
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             headers = sheet.row_values(1)
-            
             row_map = {
                 'Nombre': data.get('Nombre'),
                 'Canal (Tel/WhatsApp)': data.get('Canal'),
@@ -90,68 +106,65 @@ class DataHandler:
                 'Asesora': data.get('Asesora'),
                 'Comentarios': data.get('Comentarios', '')
             }
-
             headers = self._ensure_columns(sheet, headers, row_map.keys())
-
             folder_url = ""
             if files_payload:
                 for i, file in enumerate(files_payload):
                     res = self._send_to_script(data['Nombre'], file, f"Inicio_{i}")
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
-                
-                if folder_url:
-                    row_map['Imagenes'] = folder_url
-
-            new_row = []
-            for h in headers:
-                norm_h = self._normalize(h)
-                val = next((v for k, v in row_map.items() if self._normalize(k) == norm_h), "")
-                new_row.append(str(val))
-
+                if folder_url: row_map['Imagenes'] = folder_url
+            new_row = [str(row_map.get(h, "")) for h in headers]
             sheet.append_row(new_row)
             return True
-        except Exception as e:
-            logger.error(f"Error add_client: {e}")
-            return False
+        except: return False
 
     def update_client_advanced(self, data):
-        """Actualización multi-imagen con columnas dinámicas"""
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             headers = sheet.row_values(1)
             name = data.get('nombre_original')
             cell = sheet.find(name)
             if not cell: return False
-            
             row_idx = cell.row
             updates = data.get('updates', {})
             files_payload = data.get('files_payload', [])
-
             headers = self._ensure_columns(sheet, headers, updates.keys())
-
             if files_payload:
                 folder_url = ""
                 for i, file in enumerate(files_payload):
                     res = self._send_to_script(name, file, datetime.now().strftime("%H%M%S") + f"_{i}")
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
-                
-                if folder_url:
-                    updates['Imagenes'] = folder_url
-
+                if folder_url: updates['Imagenes'] = folder_url
             batch = []
             for k, v in updates.items():
-                norm_k = self._normalize(k)
                 col_i = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(k)), None)
-                if col_i:
-                    batch.append({'range': gspread.utils.rowcol_to_a1(row_idx, col_i), 'values': [[str(v)]]})
-            
+                if col_i: batch.append({'range': gspread.utils.rowcol_to_a1(row_idx, col_i), 'values': [[str(v)]]})
             if batch: sheet.batch_update(batch)
             return True
-        except Exception as e:
-            logger.error(f"Error update: {e}")
-            return False
+        except: return False
+
+    # --- UTILS ---
+    def _normalize(self, text):
+        if not text: return ""
+        text = str(text).lower().strip()
+        text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+        return "".join(e for e in text if e.isalnum())
+
+    def _ensure_columns(self, sheet, headers, required_columns):
+        updated_headers = list(headers)
+        new_cols = []
+        norm_headers = [self._normalize(h) for h in updated_headers]
+        for col in required_columns:
+            if self._normalize(col) not in norm_headers:
+                new_cols.append(col)
+                updated_headers.append(col)
+                norm_headers.append(self._normalize(col))
+        if new_cols:
+            sheet.update('A1', [updated_headers])
+            return updated_headers
+        return headers
 
     def _send_to_script(self, client_name, file_payload, suffix):
         try:
