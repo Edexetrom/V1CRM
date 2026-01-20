@@ -3,20 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRM Pro - Gestión Inteligente</title>
+    <title>CRM Profesional - Versión 3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; transition: background-color 0.5s ease; }
-        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            transition: background-color 0.5s ease;
+            font-size: 18px;
+        }
+
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .locked-overlay { pointer-events: none; opacity: 0.6; filter: grayscale(0.5); }
-        .read-only-box { @apply p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-700 text-sm; }
+        .read-only-box { @apply p-3 bg-slate-50 border border-slate-100 rounded-xl font-semibold text-slate-500 text-xs italic; }
+        
+        /* Pestañas Estilo Chrome - Versión 3 */
+        .chrome-tab-container {
+            @apply flex gap-1 bg-slate-200/40 pt-2 px-4 rounded-t-[2rem] border-b border-slate-200;
+        }
+        .chrome-tab {
+            /* Ajuste de fuente: de 9px a 11px para mayor legibilidad */
+            @apply relative px-5 py-3 text-[11px] font-extrabold uppercase tracking-[0.05em] cursor-pointer transition-all rounded-t-xl text-slate-400 hover:bg-white/40 flex items-center gap-2;
+            min-width: 160px;
+            justify-content: center;
+        }
+        .chrome-tab-active {
+            @apply bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.03)] z-10 text-slate-700;
+        }
+        .chrome-tab-active::before, .chrome-tab-active::after {
+            content: '';
+            @apply absolute bottom-0 w-3 h-3 bg-transparent pointer-events-none;
+        }
+        .chrome-tab-active::before {
+            left: -12px;
+            @apply rounded-br-xl;
+            box-shadow: 6px 0 0 0 white;
+        }
+        .chrome-tab-active::after {
+            right: -12px;
+            @apply rounded-bl-xl;
+            box-shadow: -6px 0 0 0 white;
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
@@ -60,7 +94,6 @@
             const [agents, setAgents] = useState([]);
             const [clients, setClients] = useState([]);
             const [loading, setLoading] = useState(false);
-            const [view, setView] = useState('login'); 
             const [modal, setModal] = useState(null); 
             const [selectedClient, setSelectedClient] = useState(null);
             const [filters, setFilters] = useState({ name: '', status: '', interest: '' });
@@ -69,7 +102,7 @@
 
             useEffect(() => {
                 fetchAgents();
-                if (user) { setView('dashboard'); fetchClients(user); }
+                if (user) fetchClients(user);
             }, []);
 
             const fetchAgents = async () => {
@@ -97,7 +130,6 @@
                 if (data.status === 'success') {
                     setUser(name);
                     localStorage.setItem('crm_user', name);
-                    setView('dashboard');
                     fetchClients(name);
                 } else { alert(data.message); }
                 setLoading(false);
@@ -107,88 +139,87 @@
                 return clients.filter(c => 
                     c.Nombre.toLowerCase().includes(filters.name.toLowerCase()) &&
                     (filters.status === '' || c['Estado Final'] === filters.status) &&
-                    (filters.interest === '' || c['Nivel de Interés'].includes(filters.interest))
+                    (filters.interest === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interest)))
                 );
             }, [clients, filters]);
 
-            if (view === 'login') return <LoginScreen agents={agents} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
+            if (!user) return <LoginScreen agents={agents} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
 
             return (
-                <div className={`min-h-screen ${activeTheme.bg} p-4 md:p-8 transition-colors duration-500`}>
-                    <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <div className={`min-h-screen ${activeTheme.bg} p-4 md:p-6 transition-all duration-500`}>
+                    <header className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center mb-8">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-sky-200" style={{backgroundColor: activeTheme.primary}}>
-                                <i className="fas fa-id-badge text-xl"></i>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md" style={{backgroundColor: activeTheme.primary}}>
+                                <i className="fas fa-users-cog text-xl"></i>
                             </div>
                             <div>
-                                <h1 className="text-2xl font-extrabold tracking-tight">CRM {user}</h1>
-                                <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Gestión de Clientes</p>
+                                <h1 className="text-xl font-extrabold text-slate-800 tracking-tight uppercase">CRM {user}</h1>
+                                <p className="text-slate-400 text-[8px] font-bold uppercase tracking-widest">Dashboard • Versión 3</p>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-3 glass p-2 rounded-2xl border border-white">
+                        <div className="flex items-center gap-3 glass p-1.5 rounded-full shadow-sm border border-white mt-4 md:mt-0">
                             {Object.keys(THEMES).map(t => (
-                                <button key={t} onClick={() => {setTheme(t); localStorage.setItem('crm_theme', t);}} className={`w-8 h-8 rounded-xl transition-all ${theme === t ? 'ring-2 ring-offset-2 ring-slate-400 scale-110 shadow-lg' : 'opacity-30'}`} style={{backgroundColor: THEMES[t].primary}} />
+                                <button key={t} onClick={() => {setTheme(t); localStorage.setItem('crm_theme', t);}} className={`w-6 h-6 rounded-full transition-all ${theme === t ? 'ring-2 ring-offset-1 ring-slate-300 scale-105' : 'opacity-40 hover:opacity-100'}`} style={{backgroundColor: THEMES[t].primary}} />
                             ))}
-                            <div className="w-px h-6 bg-slate-200 mx-2" />
-                            <button onClick={() => {localStorage.clear(); window.location.reload();}} className="text-slate-400 hover:text-red-500 p-2"><i className="fas fa-sign-out-alt"></i></button>
+                            <div className="w-px h-4 bg-slate-200 mx-1" />
+                            <button onClick={() => {localStorage.clear(); window.location.reload();}} className="text-slate-300 hover:text-red-500 p-1.5 transition-colors"><i className="fas fa-sign-out-alt text-sm"></i></button>
                         </div>
                     </header>
 
-                    <main className="max-w-7xl mx-auto">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                            <input type="text" placeholder="Buscar cliente..." className="w-full px-6 py-3 rounded-2xl border-none shadow-sm font-bold" value={filters.name} onChange={e => setFilters({...filters, name: e.target.value})} />
-                            <select className="px-4 py-3 rounded-2xl border-none shadow-sm font-bold text-slate-500" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
-                                <option value="">Estado Final (Todos)</option>
+                    <main className="max-w-6xl mx-auto">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <input type="text" placeholder="Buscar cliente..." className="w-full px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm focus:ring-2 focus:ring-offset-1 ring-sky-300 outline-none transition-all" value={filters.name} onChange={e => setFilters({...filters, name: e.target.value})} />
+                            <select className="px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm text-slate-500 outline-none" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
+                                <option value="">Estado</option>
                                 {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
-                            <select className="px-4 py-3 rounded-2xl border-none shadow-sm font-bold text-slate-500" value={filters.interest} onChange={e => setFilters({...filters, interest: e.target.value})}>
-                                <option value="">Cualquier Interés</option>
+                            <select className="px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm text-slate-500 outline-none" value={filters.interest} onChange={e => setFilters({...filters, interest: e.target.value})}>
+                                <option value="">Interés</option>
                                 {INTERES_OPTIONS.map(o => <option key={o} value={o.split(' <')[0]}>{o.split(' <')[0]}</option>)}
                             </select>
-                            <button onClick={() => setModal('new')} className="text-white font-black py-3 px-6 rounded-2xl shadow-lg flex items-center justify-center gap-2" style={{backgroundColor: activeTheme.primary}}>
-                                <i className="fas fa-plus"></i> NUEVO CLIENTE
+                            <button onClick={() => setModal('new')} className="text-white font-bold py-3 px-6 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-wider" style={{backgroundColor: activeTheme.primary}}>
+                                <i className="fas fa-plus"></i> Nuevo Cliente
                             </button>
                         </div>
 
                         <div className="glass rounded-[2rem] shadow-xl overflow-hidden border border-white">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left">
-                                    <thead>
-                                        <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-black tracking-widest">
-                                            <th className="px-6 py-5">Nombre</th>
-                                            <th className="px-6 py-5">Canal / Tel</th>
-                                            <th className="px-6 py-5">1er Contacto</th>
-                                            <th className="px-6 py-5">Próx. Cto.</th>
-                                            <th className="px-6 py-5">Interés</th>
-                                            <th className="px-6 py-5">Estado</th>
-                                            <th className="px-6 py-5 text-right pr-10">Acción</th>
+                                    <thead className="bg-slate-50/40">
+                                        <tr className="text-slate-400 text-[9px] uppercase font-bold tracking-widest">
+                                            <th className="px-6 py-4">Nombre</th>
+                                            <th className="px-6 py-4">Canal</th>
+                                            <th className="px-6 py-4">Interés</th>
+                                            <th className="px-6 py-4">Registro</th>
+                                            <th className="px-6 py-4">Próx. Cto.</th>
+                                            <th className="px-6 py-4">Estado</th>
+                                            <th className="px-6 py-4 text-right pr-10">Gestión</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {filteredClients.map((c, i) => (
                                             <tr key={i} className="hover:bg-white/60 transition-colors">
-                                                <td className="px-6 py-4 font-bold text-slate-700">{c.Nombre}</td>
-                                                <td className="px-6 py-4 text-xs font-medium text-slate-500">{c['Canal (Tel/WhatsApp)']}</td>
-                                                <td className="px-6 py-4 text-xs font-medium text-slate-500">{c['Fecha 1er Contacto']}</td>
-                                                <td className="px-6 py-4 text-xs font-black text-sky-600">{c['Fecha Próx. Contacto']}</td>
+                                                <td className="px-6 py-4 font-bold text-slate-700 text-xs">{c.Nombre}</td>
+                                                <td className="px-6 py-4 text-[11px] text-slate-500">{c['Canal (Tel/WhatsApp)'] || c['Canal']}</td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase ${c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                        {c['Nivel de Interés'].split(' <')[0]}
+                                                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${c['Nivel de Interés'] && c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                        {c['Nivel de Interés'] ? c['Nivel de Interés'].split(' <')[0] : 'N/A'}
                                                     </span>
                                                 </td>
+                                                <td className="px-6 py-4 text-[10px] text-slate-400">{c['Fecha 1er Contacto']}</td>
+                                                <td className="px-6 py-4 text-[10px] font-bold text-sky-600">{c['Fecha Próx. Contacto'] || '--'}</td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-md border text-[9px] font-black uppercase ${
-                                                        c['Estado Final'] === 'Venta' ? 'bg-green-100 text-green-700 border-green-200' :
-                                                        c['Estado Final'] === 'No interesado' ? 'bg-red-100 text-red-700 border-red-200' :
-                                                        c['Estado Final'] === 'Contactar más tarde' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                                    <span className={`px-2 py-1 rounded-lg border text-[8px] font-bold uppercase tracking-tight ${
+                                                        c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-100' :
+                                                        c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                        c['Estado Final'] === 'Contactar más tarde' ? 'bg-slate-50 text-slate-400 border-slate-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'
                                                     }`}>
                                                         {c['Estado Final']}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-right pr-10">
-                                                    <button onClick={() => {setSelectedClient(c); setModal('edit');}} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center ml-auto hover:bg-white transition-all shadow-sm">
-                                                        <i className="fas fa-folder-open text-slate-400"></i>
+                                                    <button onClick={() => {setSelectedClient(c); setModal('edit');}} className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center ml-auto hover:bg-sky-50 hover:text-sky-600 transition-all border border-slate-100 outline-none">
+                                                        <i className="fas fa-folder-open text-slate-300 text-sm"></i>
                                                     </button>
                                                 </td>
                                             </tr>
@@ -210,19 +241,19 @@
             const [pass, setPass] = useState('');
             return (
                 <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-                    <div className="max-w-md w-full glass p-10 rounded-[3rem] shadow-2xl border border-white text-center">
-                        <div className="w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-white mb-6 shadow-xl" style={{backgroundColor: theme.primary}}>
-                            <i className="fas fa-fingerprint text-3xl"></i>
+                    <div className="max-w-sm w-full glass p-10 rounded-[3rem] shadow-xl border border-white text-center">
+                        <div className="w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-white mb-6 shadow-lg" style={{backgroundColor: theme.primary}}>
+                            <i className="fas fa-user-lock text-3xl"></i>
                         </div>
-                        <h2 className="text-3xl font-black text-slate-800 mb-8 tracking-tighter uppercase">Acceso CRM</h2>
+                        <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase mb-8">Acceso CRM</h2>
                         <div className="space-y-4">
-                            <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold border-none" value={selected} onChange={e => setSelected(e.target.value)}>
-                                <option value="">Selecciona Asesora...</option>
+                            <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={selected} onChange={e => setSelected(e.target.value)}>
+                                <option value="">Seleccionar Asesora</option>
                                 {agents.map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
-                            <input type="password" placeholder="Contraseña" className="w-full p-4 rounded-2xl bg-slate-50 font-bold border-none" value={pass} onChange={e => setPass(e.target.value)} />
-                            <button onClick={() => onLogin(selected, pass)} disabled={loading || !selected || !pass} className="w-full py-4 rounded-2xl text-white font-black text-lg shadow-xl" style={{backgroundColor: theme.primary}}>
-                                {loading ? 'VALIDANDO...' : 'ENTRAR'}
+                            <input type="password" placeholder="Contraseña" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} />
+                            <button onClick={() => onLogin(selected, pass)} disabled={loading || !selected || !pass} className="w-full py-4 rounded-2xl text-white font-bold text-lg shadow-lg hover:brightness-105 transition-all" style={{backgroundColor: theme.primary}}>
+                                {loading ? 'ESPERE...' : 'INGRESAR'}
                             </button>
                         </div>
                     </div>
@@ -235,56 +266,70 @@
                 Nombre: '', Canal: '', 'Fecha 1er Contacto': toSheetDate(new Date().toISOString().split('T')[0]), 
                 'Nivel de Interés': INTERES_OPTIONS[2], 'Resumen Conversación': '', 'Fecha Próx. Contacto': '', 'Asesora': user, 'Estado Final': 'Seguimiento'
             });
-            const [file, setFile] = useState(null);
+            const [files, setFiles] = useState([]);
             const [sending, setSending] = useState(false);
 
             const save = async (e) => {
-                e.preventDefault();
-                if (form.Canal.length !== 10) return alert("Teléfono debe ser de 10 dígitos.");
+                if (e) e.preventDefault();
+                if (form.Canal.length !== 10) return alert("El teléfono debe tener 10 números.");
                 setSending(true);
                 const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/add-client', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...form, file_payload: file })
+                    body: JSON.stringify({ ...form, files_payload: files })
                 });
                 if (res.ok) { onRefresh(); onClose(); }
                 setSending(false);
             };
 
+            const handleFiles = (e) => {
+                const selectedFiles = Array.from(e.target.files);
+                const promises = selectedFiles.map(file => {
+                    return new Promise((resolve) => {
+                        const r = new FileReader();
+                        r.onloadend = () => resolve({ base64Data: r.result.split(',')[1], contentType: file.type, name: file.name });
+                        r.readAsDataURL(file);
+                    });
+                });
+                Promise.all(promises).then(payloads => setFiles(prev => [...prev, ...payloads]));
+            };
+
             return (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 flex justify-between items-center">
-                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Alta de Prospecto</h3>
-                            <button onClick={onClose} className="text-slate-300 hover:text-slate-600 transition-colors"><i className="fas fa-times"></i></button>
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
+                            <h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">Nuevo Prospecto</h3>
+                            <button type="button" onClick={onClose} className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-slate-300 hover:text-red-500 transition-all outline-none border-none"><i className="fas fa-times text-sm"></i></button>
                         </div>
-                        <form onSubmit={save} className="p-8 space-y-4 max-h-[80vh] overflow-y-auto custom-scroll">
-                            <input required type="text" placeholder="Nombre completo" className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none shadow-inner" onChange={e => setForm({...form, Nombre: e.target.value})} />
+                        <form onSubmit={save} className="p-8 space-y-4 max-h-[75vh] overflow-y-auto custom-scroll">
+                            <input required type="text" placeholder="Nombre completo" className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" onChange={e => setForm({...form, Nombre: e.target.value})} />
                             <div className="grid grid-cols-2 gap-4">
-                                <input required type="text" maxLength="10" placeholder="WhatsApp (10 dígitos)" className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none shadow-inner" value={form.Canal} onChange={e => setForm({...form, Canal: e.target.value.replace(/\D/g, '')})} />
-                                <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none shadow-inner" value={form['Estado Final']} onChange={e => setForm({...form, 'Estado Final': e.target.value})}>
+                                <input required type="text" maxLength="10" placeholder="WhatsApp (10 dígitos)" className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" value={form.Canal} onChange={e => setForm({...form, Canal: e.target.value.replace(/\D/g, '')})} />
+                                <select className="w-full p-4 rounded-2xl bg-slate-50 font-semibold text-sm border-none shadow-inner outline-none" value={form['Estado Final']} onChange={e => setForm({...form, 'Estado Final': e.target.value})}>
                                     {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                                 </select>
                             </div>
-                            <select className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none shadow-inner outline-none" value={form['Nivel de Interés']} onChange={e => setForm({...form, 'Nivel de Interés': e.target.value})}>
+                            <select className="w-full p-4 rounded-2xl bg-slate-50 font-semibold text-sm border-none shadow-inner outline-none" value={form['Nivel de Interés']} onChange={e => setForm({...form, 'Nivel de Interés': e.target.value})}>
                                 {INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
                             <div className="grid grid-cols-2 gap-4">
-                                <input required type="date" value={toInputDate(form['Fecha 1er Contacto'])} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none" onChange={e => setForm({...form, 'Fecha 1er Contacto': toSheetDate(e.target.value)})} />
-                                <input required type="date" className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none" onChange={e => setForm({...form, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} />
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Registro</label>
+                                    <input required disabled type="date" value={toInputDate(form['Fecha 1er Contacto'])} className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" onChange={e => setForm({...form, 'Fecha 1er Contacto': toSheetDate(e.target.value)})} />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Próximo Contacto</label>
+                                    <input required type="date" className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" onChange={e => setForm({...form, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} />
+                                </div>
                             </div>
-                            <textarea required placeholder="Resumen de la conversación..." className="w-full p-4 bg-slate-50 rounded-2xl font-medium h-24 border-none shadow-inner" onChange={e => setForm({...form, 'Resumen Conversación': e.target.value})}></textarea>
-                            <div className="p-6 border-4 border-dashed border-slate-100 rounded-3xl text-center relative cursor-pointer hover:bg-slate-50 transition-all">
-                                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => {
-                                    const f = e.target.files[0];
-                                    const r = new FileReader();
-                                    r.onloadend = () => setFile({ base64Data: r.result.split(',')[1], contentType: f.type });
-                                    r.readAsDataURL(f);
-                                }} />
-                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{file ? '✓ FOTO CARGADA' : 'Subir Captura de Apertura'}</p>
+                            <textarea required placeholder="Resumen inicial..." className="w-full p-5 bg-slate-50 rounded-[1.5rem] font-medium text-sm h-24 border-none shadow-inner outline-none" onChange={e => setForm({...form, 'Resumen Conversación': e.target.value})}></textarea>
+                            <div className="p-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-center relative cursor-pointer hover:bg-slate-50 group transition-all">
+                                <input multiple type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
+                                <i className="fas fa-camera text-3xl text-slate-200 mb-2 group-hover:text-sky-300"></i>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{files.length > 0 ? `✓ ${files.length} CARGADAS` : 'ADJUNTAR FOTOS'}</p>
                             </div>
-                            <button disabled={sending} className="w-full py-5 rounded-2xl text-white font-black text-lg shadow-xl" style={{backgroundColor: theme.primary}}>
-                                {sending ? 'GUARDANDO...' : 'REGISTRAR CLIENTE'}
+                            <button type="submit" disabled={sending} className="w-full py-4 rounded-2xl text-white font-bold text-md shadow-lg transition-all" style={{backgroundColor: theme.primary}}>
+                                {sending ? 'REGISTRANDO...' : 'GUARDAR EXPEDIENTE'}
                             </button>
                         </form>
                     </div>
@@ -293,158 +338,207 @@
         };
 
         const EditClientModal = ({ theme, client, onClose, onRefresh }) => {
-            const [tab, setTab] = useState('info'); 
+            const [tab, setTab] = useState('base'); 
             const [sending, setSending] = useState(false);
             const [local, setLocal] = useState({...client});
-            const [photo, setPhoto] = useState(null);
+            const [newPhotos, setNewPhotos] = useState([]);
 
             const isLocked = client['Estado Final'] === 'Venta' || client['Estado Final'] === 'No interesado';
 
-            // Detectar cuántos seguimientos existen dinámicamente
-            const getFollowUps = () => {
+            const completedList = useMemo(() => {
                 let list = [];
-                for(let i=1; i<=20; i++) { // Buscamos hasta 20 posibles seguimientos
+                for(let i=1; i<=30; i++) {
                     if(client[`Fecha Seguimiento ${i}`] && client[`Fecha Seguimiento ${i}`].toString().trim() !== "") {
-                        list.push(i);
+                        list.push({
+                            n: i,
+                            fecha: client[`Fecha Seguimiento ${i}`],
+                            nota: client[`Notas Seguimiento ${i}`]
+                        });
                     }
                 }
                 return list;
-            };
+            }, [client]);
 
-            const completed = getFollowUps();
-            const nextFollowUp = completed.length > 0 ? Math.max(...completed) + 1 : 1;
+            const nextFollowUp = completedList.length > 0 ? completedList[completedList.length - 1].n + 1 : 1;
 
-            const update = async () => {
+            // Bloquear fecha de gestión al día de hoy para nuevas gestiones
+            useEffect(() => {
+                if (tab === 'new') {
+                    setLocal(prev => ({
+                        ...prev,
+                        [`Fecha Seguimiento ${nextFollowUp}`]: toSheetDate(new Date().toISOString().split('T')[0])
+                    }));
+                }
+            }, [tab, nextFollowUp]);
+
+            const update = async (e) => {
+                if (e) e.preventDefault();
                 if (isLocked) return;
                 setSending(true);
-                // Construimos el objeto de actualizaciones
                 const updates = {
                     'Estado Final': local['Estado Final'],
                     'Nivel de Interés': local['Nivel de Interés'],
                     'Fecha Próx. Contacto': local['Fecha Próx. Contacto'],
                     'Comentarios': local['Comentarios'],
                 };
-
-                // Si estamos en una pestaña de seguimiento nuevo, agregamos esas llaves
-                if (tab.startsWith('s') && parseInt(tab.slice(1)) === nextFollowUp) {
-                    const n = tab.slice(1);
+                if (tab === 'new') {
+                    const n = nextFollowUp;
+                    const previousContactDate = client['Fecha Próx. Contacto'] || 'No definida';
+                    const noteHeader = `Fecha de contacto anterior: ${previousContactDate}`;
+                    const userNote = local[`Notas Seguimiento ${n}`] || '';
                     updates[`Fecha Seguimiento ${n}`] = local[`Fecha Seguimiento ${n}`];
-                    updates[`Notas Seguimiento ${n}`] = local[`Notas Seguimiento ${n}`];
+                    updates[`Notas Seguimiento ${n}`] = `${noteHeader}\n${userNote}`;
                 }
-
                 const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre_original: client.Nombre, updates, file_payload: photo })
+                    body: JSON.stringify({ nombre_original: client.Nombre, updates, files_payload: newPhotos })
                 });
                 if (res.ok) { onRefresh(); onClose(); }
                 setSending(false);
             };
 
-            const btnClass = (id, locked) => `px-6 py-4 text-[9px] font-black uppercase rounded-t-2xl transition-all flex items-center gap-2 ${tab === id ? 'bg-white text-slate-800 shadow-sm translate-y-[-2px]' : 'bg-slate-100 text-slate-400 hover:bg-slate-50'} ${locked ? 'opacity-60' : ''}`;
+            const handleFiles = (e) => {
+                const selectedFiles = Array.from(e.target.files);
+                const promises = selectedFiles.map(file => {
+                    return new Promise((resolve) => {
+                        const r = new FileReader();
+                        r.onloadend = () => resolve({ base64Data: r.result.split(',')[1], contentType: file.type, name: file.name });
+                        r.readAsDataURL(file);
+                    });
+                });
+                Promise.all(promises).then(payloads => setNewPhotos(prev => [...prev, ...payloads]));
+            };
 
             return (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl flex flex-col h-[92vh] overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden animate-in zoom-in duration-300">
+                        <div className="p-8 flex justify-between items-center bg-white">
                             <div>
-                                <h3 className="text-2xl font-black text-slate-800 tracking-tighter">{client.Nombre}</h3>
-                                {isLocked && <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-1 rounded-md mt-1 inline-block uppercase tracking-widest border border-red-100"><i className="fas fa-lock mr-2"></i> Cerrado</span>}
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight leading-none">{client.Nombre}</h3>
+                                {isLocked && <span className="text-[8px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full mt-2 inline-block border border-red-100 uppercase tracking-widest leading-none">Cerrado</span>}
                             </div>
-                            <div className="flex gap-4">
-                                {client.Imagenes && <a href={client.Imagenes} target="_blank" className="text-sky-600 font-bold text-xs bg-sky-50 px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-sky-100 transition-all"><i className="fas fa-images"></i> VER DRIVE</a>}
-                                <button onClick={onClose} className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"><i className="fas fa-times"></i></button>
+                            <div className="flex gap-3">
+                                {client.Imagenes && <a href={client.Imagenes} target="_blank" className="text-sky-600 font-bold text-[10px] bg-sky-50 px-4 py-3 rounded-2xl hover:bg-sky-100 transition-all flex items-center gap-2 outline-none"><i className="fas fa-folder-open"></i> DRIVE</a>}
+                                <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-white shadow-md flex items-center justify-center text-slate-300 hover:text-red-500 transition-all border-none outline-none"><i className="fas fa-times text-sm"></i></button>
                             </div>
                         </div>
 
-                        <div className="flex px-8 pt-4 gap-1 bg-slate-50/50 border-b border-slate-100 overflow-x-auto custom-scroll">
-                            <button onClick={() => setTab('info')} className={btnClass('info', false)}>Información Base</button>
-                            {completed.map(n => (
-                                <button key={n} onClick={() => setTab(`s${n}`)} className={btnClass(`s${n}`, true)}>Seg. {n} <i className="fas fa-check-circle text-[8px] opacity-40"></i></button>
-                            ))}
+                        {/* PESTAÑAS CHROME STYLE */}
+                        <div className="chrome-tab-container">
+                            <button type="button" onClick={() => setTab('base')} className={`chrome-tab ${tab === 'base' ? 'chrome-tab-active' : ''}`} style={tab === 'base' ? {color: theme.primary} : {}}>
+                                <i className="fas fa-id-badge text-xs mr-1"></i> Ficha Base
+                            </button>
+                            <button type="button" onClick={() => setTab('history')} className={`chrome-tab ${tab === 'history' ? 'chrome-tab-active' : ''}`} style={tab === 'history' ? {color: theme.primary} : {}}>
+                                <i className="fas fa-list-ul text-xs mr-1"></i> Historial
+                            </button>
                             {!isLocked && (
-                                <button onClick={() => setTab(`s${nextFollowUp}`)} className={btnClass(`s${nextFollowUp}`, false)} style={{color: theme.primary}}>
-                                    <i className="fas fa-plus-circle text-[10px]"></i> AGREGAR SEG. {nextFollowUp}
+                                <button type="button" onClick={() => setTab('new')} className={`chrome-tab ${tab === 'new' ? 'chrome-tab-active' : ''}`} style={tab === 'new' ? {color: theme.primary} : {}}>
+                                    <i className="fas fa-edit text-xs mr-1"></i> Nueva Gestión
                                 </button>
                             )}
-                            <button onClick={() => setTab('comm')} className={btnClass('comm', false)}>Comentarios</button>
+                            <button type="button" onClick={() => setTab('notes')} className={`chrome-tab ${tab === 'notes' ? 'chrome-tab-active' : ''}`} style={tab === 'notes' ? {color: theme.primary} : {}}>
+                                <i className="fas fa-comment-dots text-xs mr-1"></i> Notas Libres
+                            </button>
                         </div>
 
-                        <div className="flex-1 p-8 overflow-y-auto custom-scroll relative">
-                            {tab === 'info' && (
+                        <div className="flex-1 p-8 overflow-y-auto custom-scroll relative bg-white">
+                            {tab === 'base' && (
                                 <div className="space-y-6 animate-in fade-in duration-500">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1 ml-2">1er Contacto</p><div className="read-only-box">{client['Fecha 1er Contacto']}</div></div>
-                                        <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1 ml-2">Teléfono</p><div className="read-only-box">{client['Canal (Tel/WhatsApp)']}</div></div>
-                                        <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1 ml-2">Asesora</p><div className="read-only-box">{client['Asesora']}</div></div>
-                                        <div><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1 ml-2">Próxima Fecha</p><div className="read-only-box font-black text-sky-600 border-sky-100">{client['Fecha Próx. Contacto'] || 'No agendado'}</div></div>
+                                        <div className="space-y-1"><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Registro</p><div className="read-only-box">{client['Fecha 1er Contacto']}</div></div>
+                                        <div className="space-y-1"><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Canal</p><div className="read-only-box">{client['Canal (Tel/WhatsApp)'] || client['Canal']}</div></div>
+                                        <div className="space-y-1"><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Asesora</p><div className="read-only-box">{client['Asesora']}</div></div>
+                                        <div className="space-y-1"><p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Cita</p><div className="read-only-box text-sky-600 border-sky-100">{client['Fecha Próx. Contacto'] || '--'}</div></div>
                                     </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-2">Resumen de Apertura</p>
-                                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] font-medium text-slate-500 italic leading-relaxed">"{client['Resumen Conversación']}"</div>
+                                    <div className="space-y-2">
+                                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Apertura</p>
+                                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] font-medium text-slate-600 italic leading-relaxed text-xs">"{client['Resumen Conversación']}"</div>
                                     </div>
                                 </div>
                             )}
 
-                            {tab.startsWith('s') && (
-                                <div className={`space-y-6 animate-in slide-in-from-right-4 duration-300 ${parseInt(tab.slice(1)) <= completed.length ? 'locked-overlay' : ''}`}>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Gestión de Seguimiento #{tab.slice(1)}</h4>
-                                        {parseInt(tab.slice(1)) <= completed.length && <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest border px-3 py-1 rounded-full"><i className="fas fa-lock mr-2"></i> Registro Histórico</span>}
+                            {tab === 'history' && (
+                                <div className="space-y-5 animate-in fade-in duration-500 max-w-3xl">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Bitácora de Seguimientos</h4>
+                                    <div className="space-y-5">
+                                        {completedList.length > 0 ? completedList.map((item, idx) => (
+                                            <div key={idx} className="relative pl-8 border-l border-slate-200 pb-6">
+                                                <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm" style={{backgroundColor: theme.primary}}></div>
+                                                <div className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[8px] font-black uppercase tracking-widest" style={{color: theme.primary}}>Gestión #{item.n}</span>
+                                                        <span className="text-[9px] font-bold text-slate-400 italic">{item.fecha}</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-600 leading-relaxed font-medium whitespace-pre-wrap">{item.nota}</p>
+                                                </div>
+                                            </div>
+                                        )) : (
+                                            <div className="text-center py-10 opacity-40">
+                                                <i className="fas fa-history text-3xl mb-2"></i>
+                                                <p className="text-[9px] font-bold uppercase tracking-widest">Sin registros previos</p>
+                                            </div>
+                                        )}
                                     </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-300 uppercase ml-4">Fecha de Seguimiento</label>
-                                            <input type="date" disabled={parseInt(tab.slice(1)) <= completed.length} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none" value={toInputDate(local[`Fecha Seguimiento ${tab.slice(1)}`])} onChange={e => setLocal({...local, [`Fecha Seguimiento ${tab.slice(1)}`]: toSheetDate(e.target.value)})} />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-300 uppercase ml-4">Actualizar Próximo Contacto</label>
-                                            <input type="date" disabled={parseInt(tab.slice(1)) <= completed.length} className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none" value={toInputDate(local['Fecha Próx. Contacto'])} onChange={e => setLocal({...local, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} />
-                                        </div>
-                                    </div>
+                                </div>
+                            )}
 
-                                    <div className="grid grid-cols-2 gap-4">
+                            {tab === 'new' && (
+                                <div className="space-y-6 animate-in slide-in-from-right-2 duration-400 max-w-3xl">
+                                    <div className="grid grid-cols-2 gap-6">
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-300 uppercase ml-4">Nivel de Interés Actual</label>
-                                            <select disabled={parseInt(tab.slice(1)) <= completed.length} className="w-full p-4 rounded-2xl bg-slate-50 font-bold border-none outline-none" value={local['Nivel de Interés']} onChange={e => setLocal({...local, 'Nivel de Interés': e.target.value})}>
+                                            <label className="text-[8px] font-bold text-slate-300 uppercase ml-4">Fecha Gestión</label>
+                                            <input type="date" disabled className="w-full p-4 bg-slate-100 rounded-2xl font-bold border-none shadow-inner opacity-60 outline-none cursor-not-allowed text-xs" value={toInputDate(local[`Fecha Seguimiento ${nextFollowUp}`])} />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-bold text-slate-300 uppercase ml-4">Próxima Cita</label>
+                                            <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl font-bold border-none shadow-inner outline-none text-xs" value={toInputDate(local['Fecha Próx. Contacto'])} onChange={e => setLocal({...local, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-bold text-slate-300 uppercase ml-4">Interés</label>
+                                            <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border-none outline-none shadow-inner" value={local['Nivel de Interés']} onChange={e => setLocal({...local, 'Nivel de Interés': e.target.value})}>
                                                 {INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                                             </select>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-300 uppercase ml-4">Cambiar Estado Final</label>
-                                            <select disabled={parseInt(tab.slice(1)) <= completed.length} className="w-full p-4 rounded-2xl bg-slate-50 font-bold border-none outline-none" value={local['Estado Final']} onChange={e => setLocal({...local, 'Estado Final': e.target.value})}>
+                                            <label className="text-[8px] font-bold text-slate-300 uppercase ml-4">Estado</label>
+                                            <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border-none outline-none shadow-inner" value={local['Estado Final']} onChange={e => setLocal({...local, 'Estado Final': e.target.value})}>
                                                 {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                                             </select>
                                         </div>
                                     </div>
-
-                                    <textarea disabled={parseInt(tab.slice(1)) <= completed.length} className="w-full p-6 bg-slate-50 rounded-[2rem] font-medium h-40 border-none shadow-inner" placeholder="Registrar lo conversado con el cliente..." value={local[`Notas Seguimiento ${tab.slice(1)}`] || ''} onChange={e => setLocal({...local, [`Notas Seguimiento ${tab.slice(1)}`]: e.target.value})}></textarea>
-
-                                    {parseInt(tab.slice(1)) === nextFollowUp && !isLocked && (
-                                        <div className="p-6 border-4 border-dashed border-slate-100 rounded-3xl text-center relative cursor-pointer hover:bg-slate-50 transition-all group">
-                                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => {
-                                                const f = e.target.files[0];
-                                                const r = new FileReader();
-                                                r.onloadend = () => setPhoto({ base64Data: r.result.split(',')[1], contentType: f.type });
-                                                r.readAsDataURL(f);
-                                            }} />
-                                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest group-hover:text-sky-500 transition-colors">{photo ? '✓ IMAGEN LISTA' : 'SUBIR FOTO DE GESTIÓN'}</p>
+                                    <textarea className="w-full p-6 bg-slate-50 rounded-[2rem] font-medium text-xs h-36 border-none shadow-inner leading-relaxed outline-none" placeholder="Notas de la gestión..." value={local[`Notas Seguimiento ${nextFollowUp}`] || ''} onChange={e => setLocal({...local, [`Notas Seguimiento ${nextFollowUp}`]: e.target.value})}></textarea>
+                                    
+                                    <div className="space-y-4">
+                                        <div className="p-8 border-2 border-dashed border-slate-100 rounded-[2.5rem] text-center relative cursor-pointer hover:bg-slate-50 group transition-all">
+                                            <input multiple type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
+                                            <i className="fas fa-camera text-3xl text-slate-100 mb-2 group-hover:text-sky-300 transition-colors"></i>
+                                            <p className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">{newPhotos.length > 0 ? `✓ ${newPhotos.length} CARGADAS` : 'SUBIR FOTOS'}</p>
                                         </div>
-                                    )}
+                                        {newPhotos.length > 0 && (
+                                            <div className="px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 max-h-24 overflow-y-auto custom-scroll">
+                                                {newPhotos.map((f, idx) => <p key={idx} className="text-[8px] font-bold text-slate-400 truncate">• {f.name}</p>)}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
-                            {tab === 'comm' && (
-                                <textarea className="w-full p-8 bg-slate-50 rounded-[2.5rem] font-medium h-80 border-none shadow-inner outline-none animate-in zoom-in-95 duration-500" placeholder="Bitácora libre de comentarios..." value={local['Comentarios'] || ''} onChange={e => setLocal({...local, 'Comentarios': e.target.value})}></textarea>
+                            {tab === 'notes' && (
+                                <div className="space-y-4 animate-in zoom-in-95 h-full">
+                                    <h4 className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-4">Comentarios Libres</h4>
+                                    <textarea className="w-full p-8 bg-slate-50 rounded-[2.5rem] font-medium text-xs h-80 border-none shadow-inner outline-none leading-relaxed" placeholder="Anotaciones internas generales..." value={local['Comentarios'] || ''} onChange={e => setLocal({...local, 'Comentarios': e.target.value})}></textarea>
+                                </div>
                             )}
                         </div>
 
                         <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex gap-4">
-                            <button onClick={onClose} className="flex-1 py-4 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all">Cancelar</button>
-                            {(!isLocked && !tab.startsWith('info') && (tab === 'comm' || parseInt(tab.slice(1)) === nextFollowUp)) && (
-                                <button onClick={update} disabled={sending} className="flex-[2] py-4 rounded-2xl text-white font-black text-lg shadow-xl hover:scale-[1.01] active:scale-95 transition-all" style={{backgroundColor: theme.primary}}>
-                                    {sending ? 'GUARDANDO...' : 'SINCRONIZAR EXPEDIENTE'}
+                            <button type="button" onClick={onClose} className="flex-1 py-4 text-slate-400 font-bold uppercase text-[9px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all border-none outline-none">Descartar</button>
+                            {(!isLocked && tab !== 'base') && (
+                                <button type="button" onClick={update} disabled={sending} className="flex-[2] py-4 rounded-2xl text-white font-bold text-sm shadow-xl hover:brightness-105 active:scale-95 transition-all outline-none border-none uppercase tracking-wider" style={{backgroundColor: theme.primary}}>
+                                    {sending ? 'SINCRONIZANDO...' : 'Sincronizar Expediente'}
                                 </button>
                             )}
                         </div>
