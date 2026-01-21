@@ -18,7 +18,15 @@
             font-size: 18px;
         }
 
-        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        /* Ajuste para WebKit (Safari en Mac) */
+        .glass { 
+            background: rgba(255, 255, 255, 0.95); 
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px); 
+            position: relative;
+            z-index: 1;
+        }
+
         .custom-scroll::-webkit-scrollbar { width: 5px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .locked-overlay { pointer-events: none; opacity: 0.6; filter: grayscale(0.5); }
@@ -29,7 +37,6 @@
             @apply flex gap-1 bg-slate-200/40 pt-2 px-4 rounded-t-[2rem] border-b border-slate-200;
         }
         .chrome-tab {
-            /* Ajuste de fuente: de 9px a 11px para mayor legibilidad */
             @apply relative px-5 py-3 text-[11px] font-extrabold uppercase tracking-[0.05em] cursor-pointer transition-all rounded-t-xl text-slate-400 hover:bg-white/40 flex items-center gap-2;
             min-width: 160px;
             justify-content: center;
@@ -106,39 +113,53 @@
             }, []);
 
             const fetchAgents = async () => {
-                const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents');
-                const data = await res.json();
-                setAgents(data);
+                try {
+                    // cache: 'no-cache' fuerza a Safari a no usar listas viejas o vacías
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents', { cache: 'no-cache' });
+                    const data = await res.json();
+                    if (data && Array.isArray(data)) {
+                        setAgents(data);
+                    }
+                } catch (err) {
+                    console.error("Error en fetchAgents:", err);
+                }
             };
 
             const fetchClients = async (name) => {
                 setLoading(true);
-                const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${name}`);
-                const data = await res.json();
-                setClients(data);
+                try {
+                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${name}`, { cache: 'no-cache' });
+                    const data = await res.json();
+                    setClients(data);
+                } catch (err) {
+                    console.error("Error en fetchClients:", err);
+                }
                 setLoading(false);
             };
 
             const handleLogin = async (name, password) => {
                 setLoading(true);
-                const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre: name, password })
-                });
-                const data = await res.json();
-                if (data.status === 'success') {
-                    setUser(name);
-                    localStorage.setItem('crm_user', name);
-                    fetchClients(name);
-                } else { alert(data.message); }
+                try {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nombre: name, password })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        setUser(name);
+                        localStorage.setItem('crm_user', name);
+                        fetchClients(name);
+                    } else { alert(data.message || "Credenciales incorrectas"); }
+                } catch (err) {
+                    alert("Error de conexión");
+                }
                 setLoading(false);
             };
 
             const filteredClients = useMemo(() => {
                 const search = filters.name.toLowerCase();
                 return clients.filter(c => {
-                    // Función de búsqueda que permite filtrar por Nombre o por Teléfono (Canal)
                     const matchesSearch = 
                         c.Nombre.toLowerCase().includes(search) || 
                         (c['Canal (Tel/WhatsApp)'] || c['Canal'] || '').toString().includes(search);
@@ -310,7 +331,23 @@
                         <form onSubmit={save} className="p-8 space-y-4 max-h-[75vh] overflow-y-auto custom-scroll">
                             <input required type="text" placeholder="Nombre completo" className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" onChange={e => setForm({...form, Nombre: e.target.value})} />
                             <div className="grid grid-cols-2 gap-4">
-                                <input required type="text" maxLength="10" placeholder="WhatsApp (10 dígitos)" className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" value={form.Canal} onChange={e => setForm({...form, Canal: e.target.value.replace(/\D/g, '')})} />
+                                <input 
+                                    required 
+                                    type="text" 
+                                    placeholder="WhatsApp (10 dígitos)" 
+                                    className="w-full p-4 bg-slate-50 rounded-2xl font-semibold text-sm border-none shadow-inner outline-none" 
+                                    value={form.Canal} 
+                                    onChange={e => {
+                                        const cleanVal = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                        setForm({...form, Canal: cleanVal});
+                                    }}
+                                    onPaste={e => {
+                                        e.preventDefault();
+                                        const pastedData = (e.clipboardData || window.clipboardData).getData('text');
+                                        const cleanedData = pastedData.replace(/\D/g, '').slice(0, 10);
+                                        setForm({...form, Canal: cleanedData});
+                                    }}
+                                />
                                 <select className="w-full p-4 rounded-2xl bg-slate-50 font-semibold text-sm border-none shadow-inner outline-none" value={form['Estado Final']} onChange={e => setForm({...form, 'Estado Final': e.target.value})}>
                                     {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                                 </select>
@@ -367,7 +404,6 @@
 
             const nextFollowUp = completedList.length > 0 ? completedList[completedList.length - 1].n + 1 : 1;
 
-            // Bloquear fecha de gestión al día de hoy para nuevas gestiones
             useEffect(() => {
                 if (tab === 'new') {
                     setLocal(prev => ({
@@ -430,7 +466,6 @@
                             </div>
                         </div>
 
-                        {/* PESTAÑAS CHROME STYLE */}
                         <div className="chrome-tab-container">
                             <button type="button" onClick={() => setTab('base')} className={`chrome-tab ${tab === 'base' ? 'chrome-tab-active' : ''}`} style={tab === 'base' ? {color: theme.primary} : {}}>
                                 <i className="fas fa-id-badge text-xs mr-1"></i> Ficha Base

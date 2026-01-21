@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 class DataHandler:
     """
-    Versión 4.7: Manejador centralizado con auto-registro de contraseñas.
+    Versión 4.8: Manejador centralizado con auto-registro de contraseñas.
     Soporta Panel de Asesoras (Alta/Update) y Panel de Auditoría (Filtros/Borrado).
+    Actualizado con nomenclatura de imágenes dinámica (Nuevo/S1/S2...).
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
@@ -35,7 +36,7 @@ class DataHandler:
                 info = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
                 self.client = gspread.service_account_from_dict(info)
                 self.workbook = self.client.open_by_url(self.SHEET_URL)
-                logger.info("Conexión Sheets OK - Versión 4.7")
+                logger.info("Conexión Sheets OK - Versión 4.8")
         except Exception as e:
             logger.error(f"Error conexión: {e}")
 
@@ -77,7 +78,6 @@ class DataHandler:
         except: return []
 
     def delete_client_and_folder(self, name):
-        """Elimina fila y manda petición de borrado de ID a Drive."""
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             headers = sheet.row_values(1)
@@ -88,14 +88,12 @@ class DataHandler:
             row_idx = cell.row
             row_data = sheet.row_values(row_idx)
             
-            # Buscar ID de Drive en columna imágenes
             img_col_idx = next((i for i, h in enumerate(norm_headers) if "imagen" in h), None)
             if img_col_idx is not None and img_col_idx < len(row_data):
                 url = row_data[img_col_idx]
                 match = re.search(r'([a-zA-Z0-9\-_]{25,50})', url)
                 if match:
                     id_drive = match.group(1)
-                    logger.info(f"Enviando solicitud de borrado a Drive para ID: {id_drive}")
                     try:
                         requests.post(self.SCRIPT_URL, json={"action": "delete", "folderId": id_drive}, timeout=20)
                     except Exception as err:
@@ -138,7 +136,8 @@ class DataHandler:
             folder_url = ""
             if files_payload:
                 for i, file in enumerate(files_payload):
-                    res = self._send_to_script(data['Nombre'], file, f"Inicio_{i}")
+                    # Nomenclatura para Registro Nuevo
+                    res = self._send_to_script(data['Nombre'], file, f"Nuevo_{i}")
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
                 if folder_url: row_map['Imagenes'] = folder_url
@@ -158,13 +157,25 @@ class DataHandler:
             updates = data.get('updates', {})
             files_payload = data.get('files_payload', [])
             headers = self._ensure_columns(sheet, headers, updates.keys())
+            
+            # Detectar el tag de seguimiento (S1, S2, etc.) basándose en las columnas actualizadas
+            tag = "Update"
+            for k in updates.keys():
+                if "Fecha Seguimiento" in k:
+                    match = re.search(r'(\d+)', k)
+                    if match:
+                        tag = f"S{match.group(1)}"
+                        break
+
             if files_payload:
                 folder_url = ""
                 for i, file in enumerate(files_payload):
-                    res = self._send_to_script(name, file, datetime.now().strftime("%H%M%S") + f"_{i}")
+                    # Nomenclatura para Seguimientos (S1, S2...)
+                    res = self._send_to_script(name, file, f"{tag}_{i}")
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
                 if folder_url: updates['Imagenes'] = folder_url
+            
             batch = []
             for k, v in updates.items():
                 col_i = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(k)), None)
@@ -195,11 +206,16 @@ class DataHandler:
         return headers
 
     def _send_to_script(self, client_name, file_payload, suffix):
+        """Construye el nombre exacto: Nombre_Apellido_Tipo_Indice.png"""
         try:
+            # Reemplazar espacios por guiones bajos para el nombre del archivo
+            clean_name = client_name.strip().replace(" ", "_")
+            filename = f"{clean_name}_{suffix}.png"
+            
             payload = {
                 "parentFolderId": self.PARENT_FOLDER_ID,
                 "clientName": client_name,
-                "filename": f"{client_name}_{suffix}.png",
+                "filename": filename,
                 "contentType": file_payload.get('contentType', 'image/png'),
                 "base64Data": file_payload.get('base64Data')
             }
