@@ -105,13 +105,20 @@
             };
 
             const processedClients = useMemo(() => clients.map(c => ({ ...c, _rendimiento: getRendimiento(c) })), [clients]);
-            const filteredClients = useMemo(() => processedClients.filter(c => 
-                (filters.nombre === '' || (c.Nombre && c.Nombre.toLowerCase().includes(filters.nombre.toLowerCase()))) &&
-                (filters.asesora === '' || c.Asesora === filters.asesora) &&
-                (filters.interes === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interes))) &&
-                (filters.estado === '' || c['Estado Final'] === filters.estado) &&
-                (filters.rendimiento === '' || c._rendimiento.label === filters.rendimiento)
-            ), [processedClients, filters]);
+            
+            const filteredClients = useMemo(() => {
+                const search = filters.nombre.toLowerCase();
+                return processedClients.filter(c => 
+                    (search === '' || 
+                        (c.Nombre && c.Nombre.toLowerCase().includes(search)) || 
+                        (c['Canal (Tel/WhatsApp)'] || c['Canal'] || '').toString().includes(search)
+                    ) &&
+                    (filters.asesora === '' || c.Asesora === filters.asesora) &&
+                    (filters.interes === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interes))) &&
+                    (filters.estado === '' || c['Estado Final'] === filters.estado) &&
+                    (filters.rendimiento === '' || c._rendimiento.label === filters.rendimiento)
+                );
+            }, [processedClients, filters]);
 
             const executeDelete = async () => {
                 const nombre = deleteConfirmation; setDeleteConfirmation(null); setLoading(true);
@@ -158,7 +165,7 @@
                         <div className="flex flex-wrap gap-3 items-center">
                             <div className="relative group">
                                 <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-500 transition-colors"></i>
-                                <input type="text" placeholder="Buscar por nombre..." className="bg-white pl-12 pr-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200 w-64 transition-all" value={filters.nombre} onChange={e => setFilters({...filters, nombre: e.target.value})} />
+                                <input type="text" placeholder="Buscar por nombre o teléfono..." className="bg-white pl-12 pr-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200 w-64 transition-all" value={filters.nombre} onChange={e => setFilters({...filters, nombre: e.target.value})} />
                             </div>
                             <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.asesora} onChange={e => setFilters({...filters, asesora: e.target.value})}>
                                 <option value="">Asesoras</option>
@@ -184,6 +191,8 @@
                                         <tr className="text-slate-400 text-[10px] uppercase font-black tracking-widest">
                                             <th className="px-10 py-6">Asesora</th>
                                             <th className="px-10 py-6">Nombre Cliente</th>
+                                            <th className="px-10 py-6">Teléfono</th>
+                                            <th className="px-10 py-6">Fecha Registro</th>
                                             <th className="px-10 py-6">Próxima Cita</th>
                                             <th className="px-10 py-6">Estado</th>
                                             <th className="px-10 py-6">Rendimiento</th>
@@ -195,6 +204,8 @@
                                             <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                                                 <td className="px-10 py-5"><span className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase border inline-block ${c._rendimiento.class}`}>{c.Asesora}</span></td>
                                                 <td className="px-10 py-5 font-bold text-slate-700 text-xs">{c.Nombre}</td>
+                                                <td className="px-10 py-5 text-xs text-slate-500">{c['Canal (Tel/WhatsApp)'] || c['Canal'] || '--'}</td>
+                                                <td className="px-10 py-5 text-xs text-slate-500">{c['Fecha 1er Contacto'] || '--'}</td>
                                                 <td className="px-10 py-5 text-xs font-bold text-slate-500">{c['Fecha Próx. Contacto'] || '--'}</td>
                                                 <td className="px-10 py-5 text-[10px] font-black uppercase text-slate-400">{c['Estado Final']}</td>
                                                 <td className="px-10 py-5"><span className={`text-[10px] font-black uppercase ${c._rendimiento.class.split(' ')[0]}`}>{c._rendimiento.label}</span></td>
@@ -203,7 +214,7 @@
                                                     {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c.Nombre)} className="w-10 h-10 rounded-xl bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all"><i className="fas fa-trash-alt text-base"></i></button>}
                                                 </td>
                                             </tr>
-                                        )) : <tr><td colSpan="6" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Sin resultados</td></tr>}
+                                        )) : <tr><td colSpan="8" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Sin resultados</td></tr>}
                                     </tbody>
                                 </table>
                             </div>

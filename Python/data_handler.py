@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class DataHandler:
     """
-    Versión 4.6: Manejador centralizado.
+    Versión 4.7: Manejador centralizado con auto-registro de contraseñas.
     Soporta Panel de Asesoras (Alta/Update) y Panel de Auditoría (Filtros/Borrado).
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
@@ -35,9 +35,37 @@ class DataHandler:
                 info = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
                 self.client = gspread.service_account_from_dict(info)
                 self.workbook = self.client.open_by_url(self.SHEET_URL)
-                logger.info("Conexión Sheets OK - Versión 4.6")
+                logger.info("Conexión Sheets OK - Versión 4.7")
         except Exception as e:
             logger.error(f"Error conexión: {e}")
+
+    # --- GESTIÓN DE SEGURIDAD (AUTO-REGISTRO) ---
+    def set_agent_password(self, agent_name, new_password):
+        try:
+            sheet = self.workbook.worksheet("AsesorasActivas")
+            cell = sheet.find(agent_name)
+            if cell:
+                # Columna 2 es 'password' en AsesorasActivas
+                sheet.update_cell(cell.row, 2, str(new_password))
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error al registrar clave de asesora: {e}")
+            return False
+
+    def set_auditor_password(self, auditor_name, new_password, permissions="Visualizador"):
+        try:
+            sheet = self.workbook.worksheet("Auditores")
+            cell = sheet.find(auditor_name)
+            if cell:
+                # Columna 2 es 'Contraseña', Columna 3 es 'Permisos'
+                sheet.update_cell(cell.row, 2, str(new_password))
+                sheet.update_cell(cell.row, 3, permissions)
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error al registrar clave de auditor: {e}")
+            return False
 
     # --- AUDITORÍA ---
     def get_auditors(self):

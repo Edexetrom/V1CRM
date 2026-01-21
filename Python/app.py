@@ -36,9 +36,27 @@ def login_audit():
         password = str(data.get('password'))
         auditors = handler.get_auditors()
         auditor = next((a for a in auditors if a['Nombre'] == name), None)
-        if not auditor: return jsonify({"status": "error", "message": "Auditor no encontrado"}), 404
-        if str(auditor['Contraseña']) == password:
+        
+        if not auditor: 
+            return jsonify({"status": "error", "message": "Auditor no encontrado"}), 404
+        
+        # Lógica de Auto-registro de Contraseña para Auditor
+        stored_password = str(auditor.get('Contraseña', '')).strip()
+        if not stored_password or stored_password == '0' or stored_password.lower() == 'none':
+            if handler.set_auditor_password(name, password, "Visualizador"):
+                return jsonify({
+                    "status": "success", 
+                    "nombre": name, 
+                    "permisos": "Visualizador", 
+                    "message": "Contraseña registrada con perfil Visualizador"
+                })
+            else:
+                return jsonify({"status": "error", "message": "Error al registrar contraseña"}), 500
+
+        # Verificación estándar
+        if stored_password == password:
             return jsonify({"status": "success", "nombre": name, "permisos": auditor['Permisos']})
+            
         return jsonify({"status": "error", "message": "Clave incorrecta"}), 401
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -63,10 +81,29 @@ def login():
         password = str(data.get('password'))
         agents = handler.get_active_agents()
         agent = next((a for a in agents if a['nombre'] == name), None)
-        if not agent: return jsonify({"status": "error", "message": "No encontrada"}), 404
-        if str(agent['password']) == password: return jsonify({"status": "success", "nombre": name})
+        
+        if not agent: 
+            return jsonify({"status": "error", "message": "No encontrada"}), 404
+        
+        # Lógica de Auto-registro de Contraseña para Asesora
+        stored_password = str(agent.get('password', '')).strip()
+        if not stored_password or stored_password == '0' or stored_password.lower() == 'none':
+            if handler.set_agent_password(name, password):
+                return jsonify({
+                    "status": "success", 
+                    "nombre": name, 
+                    "message": "Clave registrada correctamente"
+                })
+            else:
+                return jsonify({"status": "error", "message": "Error al registrar clave"}), 500
+
+        # Verificación estándar
+        if stored_password == password: 
+            return jsonify({"status": "success", "nombre": name})
+            
         return jsonify({"status": "error"}), 401
-    except Exception as e: return jsonify({"status": "error"}), 500
+    except Exception as e: 
+        return jsonify({"status": "error"}), 500
 
 @app.route('/api/clients', methods=['GET'])
 def get_clients():
