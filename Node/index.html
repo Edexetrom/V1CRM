@@ -136,11 +136,17 @@
             };
 
             const filteredClients = useMemo(() => {
-                return clients.filter(c => 
-                    c.Nombre.toLowerCase().includes(filters.name.toLowerCase()) &&
-                    (filters.status === '' || c['Estado Final'] === filters.status) &&
-                    (filters.interest === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interest)))
-                );
+                const search = filters.name.toLowerCase();
+                return clients.filter(c => {
+                    // Función de búsqueda que permite filtrar por Nombre o por Teléfono (Canal)
+                    const matchesSearch = 
+                        c.Nombre.toLowerCase().includes(search) || 
+                        (c['Canal (Tel/WhatsApp)'] || c['Canal'] || '').toString().includes(search);
+
+                    return matchesSearch &&
+                        (filters.status === '' || c['Estado Final'] === filters.status) &&
+                        (filters.interest === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interest)))
+                });
             }, [clients, filters]);
 
             if (!user) return <LoginScreen agents={agents} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
@@ -168,7 +174,7 @@
 
                     <main className="max-w-6xl mx-auto">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <input type="text" placeholder="Buscar cliente..." className="w-full px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm focus:ring-2 focus:ring-offset-1 ring-sky-300 outline-none transition-all" value={filters.name} onChange={e => setFilters({...filters, name: e.target.value})} />
+                            <input type="text" placeholder="Buscar por nombre o teléfono..." className="w-full px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm focus:ring-2 focus:ring-offset-1 ring-sky-300 outline-none transition-all" value={filters.name} onChange={e => setFilters({...filters, name: e.target.value})} />
                             <select className="px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm text-slate-500 outline-none" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
                                 <option value="">Estado</option>
                                 {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
