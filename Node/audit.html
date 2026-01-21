@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Auditoría CRM - Versión 4.6</title>
+    <title>Panel de Auditoría CRM - Versión 4.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -43,6 +43,8 @@
             sunset: { primary: '#f59e0b', bg: 'bg-amber-50', name: 'Sunset' },
             berry: { primary: '#8b5cf6', bg: 'bg-violet-50', name: 'Berry' }
         };
+
+        const INTERES_FILTROS = ["Sin interés", "Bajo", "Medio", "Alto"];
 
         const App = () => {
             const [user, setUser] = useState(() => localStorage.getItem('audit_user') || null);
@@ -171,6 +173,10 @@
                                 <option value="">Asesoras</option>
                                 {[...new Set(clients.map(c => c.Asesora))].map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
+                            <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.interes} onChange={e => setFilters({...filters, interes: e.target.value})}>
+                                <option value="">Interés</option>
+                                {INTERES_FILTROS.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
                             <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.estado} onChange={e => setFilters({...filters, estado: e.target.value})}>
                                 <option value="">Estado</option>
                                 {["Seguimiento", "Venta", "Contactar más tarde", "No interesado"].map(o => <option key={o} value={o}>{o}</option>)}
@@ -192,6 +198,7 @@
                                             <th className="px-10 py-6">Asesora</th>
                                             <th className="px-10 py-6">Nombre Cliente</th>
                                             <th className="px-10 py-6">Teléfono</th>
+                                            <th className="px-10 py-6">Nivel Interés</th>
                                             <th className="px-10 py-6">Fecha Registro</th>
                                             <th className="px-10 py-6">Próxima Cita</th>
                                             <th className="px-10 py-6">Estado</th>
@@ -205,6 +212,11 @@
                                                 <td className="px-10 py-5"><span className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase border inline-block ${c._rendimiento.class}`}>{c.Asesora}</span></td>
                                                 <td className="px-10 py-5 font-bold text-slate-700 text-xs">{c.Nombre}</td>
                                                 <td className="px-10 py-5 text-xs text-slate-500">{c['Canal (Tel/WhatsApp)'] || c['Canal'] || '--'}</td>
+                                                <td className="px-10 py-5">
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${c['Nivel de Interés'] && c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                        {c['Nivel de Interés'] ? c['Nivel de Interés'].split(' <')[0] : 'N/A'}
+                                                    </span>
+                                                </td>
                                                 <td className="px-10 py-5 text-xs text-slate-500">{c['Fecha 1er Contacto'] || '--'}</td>
                                                 <td className="px-10 py-5 text-xs font-bold text-slate-500">{c['Fecha Próx. Contacto'] || '--'}</td>
                                                 <td className="px-10 py-5 text-[10px] font-black uppercase text-slate-400">{c['Estado Final']}</td>
@@ -214,7 +226,7 @@
                                                     {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c.Nombre)} className="w-10 h-10 rounded-xl bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all"><i className="fas fa-trash-alt text-base"></i></button>}
                                                 </td>
                                             </tr>
-                                        )) : <tr><td colSpan="8" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Sin resultados</td></tr>}
+                                        )) : <tr><td colSpan="9" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Sin resultados</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
