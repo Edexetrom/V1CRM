@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 class DataHandler:
     """
-    Versión 4.8: Manejador centralizado con auto-registro de contraseñas.
+    Versión 4.9: Manejador centralizado con auto-registro de contraseñas.
     Soporta Panel de Asesoras (Alta/Update) y Panel de Auditoría (Filtros/Borrado).
-    Actualizado con nomenclatura de imágenes dinámica (Nuevo/S1/S2...).
+    Mejora: Congelación de Rendimiento (Nivel de Interés) para estados Venta/No interesado.
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
@@ -36,7 +36,7 @@ class DataHandler:
                 info = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
                 self.client = gspread.service_account_from_dict(info)
                 self.workbook = self.client.open_by_url(self.SHEET_URL)
-                logger.info("Conexión Sheets OK - Versión 4.8")
+                logger.info("Conexión Sheets OK - Versión 4.9")
         except Exception as e:
             logger.error(f"Error conexión: {e}")
 
@@ -136,7 +136,6 @@ class DataHandler:
             folder_url = ""
             if files_payload:
                 for i, file in enumerate(files_payload):
-                    # Nomenclatura para Registro Nuevo
                     res = self._send_to_script(data['Nombre'], file, f"Nuevo_{i}")
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
@@ -147,6 +146,9 @@ class DataHandler:
         except: return False
 
     def update_client_advanced(self, data):
+        """
+        Actualiza los datos y bloquea el rendimiento si el estado es Venta o No interesado.
+        """
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             headers = sheet.row_values(1)
@@ -154,11 +156,29 @@ class DataHandler:
             cell = sheet.find(name)
             if not cell: return False
             row_idx = cell.row
+            
+            # 1. Obtener estado actual del cliente en la hoja
+            current_row_values = sheet.row_values(row_idx)
+            # Rellenar faltantes para evitar errores de índice
+            while len(current_row_values) < len(headers):
+                current_row_values.append("")
+            
+            row_data_actual = dict(zip(headers, current_row_values))
+            status_actual = str(row_data_actual.get('Estado Final', '')).strip()
+
             updates = data.get('updates', {})
             files_payload = data.get('files_payload', [])
             headers = self._ensure_columns(sheet, headers, updates.keys())
             
-            # Detectar el tag de seguimiento (S1, S2, etc.) basándose en las columnas actualizadas
+            # 2. CONGELAR RENDIMIENTO: Si el cliente ya está en Venta o No interesado, 
+            # eliminamos 'Nivel de Interés' de las actualizaciones para que no cambie.
+            if status_actual in ["Venta", "No interesado"]:
+                if 'Nivel de Interés' in updates:
+                    del updates['Nivel de Interés']
+                # Nota: Si el usuario intenta cambiar el estado de Venta a Seguimiento, 
+                # también podríamos bloquearlo aquí si se requiere.
+            
+            # Detectar el tag de seguimiento (S1, S2, etc.)
             tag = "Update"
             for k in updates.keys():
                 if "Fecha Seguimiento" in k:
@@ -170,7 +190,6 @@ class DataHandler:
             if files_payload:
                 folder_url = ""
                 for i, file in enumerate(files_payload):
-                    # Nomenclatura para Seguimientos (S1, S2...)
                     res = self._send_to_script(name, file, f"{tag}_{i}")
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
@@ -182,7 +201,9 @@ class DataHandler:
                 if col_i: batch.append({'range': gspread.utils.rowcol_to_a1(row_idx, col_i), 'values': [[str(v)]]})
             if batch: sheet.batch_update(batch)
             return True
-        except: return False
+        except Exception as e:
+            logger.error(f"Error en update_client_advanced: {e}")
+            return False
 
     # --- UTILS ---
     def _normalize(self, text):
