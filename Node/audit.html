@@ -275,7 +275,6 @@
 
                 let chartLabels, chartData, backgroundColors;
 
-                // --- MODIFICACIÓN ESPECÍFICA PARA COLORES Y ORDEN DE RENDIMIENTO ---
                 if (groupBy === 'Rendimiento') {
                     const order = ["En tiempo", "Retraso", "Acción Necesaria"];
                     const colorMap = {
@@ -284,9 +283,7 @@
                         "Acción Necesaria": "#dc2626" // Rojo
                     };
                     
-                    // Solo incluimos las etiquetas que tengan datos y sigan el orden
                     chartLabels = order.filter(label => counts[label] !== undefined);
-                    // Añadimos "Sin Cita" o etiquetas extra si existen pero no están en el orden
                     Object.keys(counts).forEach(label => {
                         if (!order.includes(label)) chartLabels.push(label);
                     });
@@ -296,7 +293,19 @@
                 } else {
                     chartLabels = Object.keys(counts);
                     chartData = Object.values(counts);
-                    backgroundColors = [activeColor, '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#64748b'];
+                    
+                    // --- PALETA DE ALTO CONTRASTE (50 COLORES PARA 25 ASESORAS) ---
+                    backgroundColors = [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', 
+                        '#E7E9ED', '#8AC7DB', '#F44336', '#E91E63', '#9C27B0', '#673AB7', 
+                        '#3F51B5', '#2196F3', '#03A9F4', '#00BCD4', '#009688', '#4CAF50', 
+                        '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722', 
+                        '#795548', '#9E9E9E', '#607D8B', '#000000', '#D4AC0D', '#196F3D', 
+                        '#7D3C98', '#A93226', '#2E86C1', '#138D75', '#E67E22', '#5D6D7E', 
+                        '#F4D03F', '#58D68D', '#AF7AC5', '#EB984E', '#52BE80', '#A04000', 
+                        '#0E6251', '#D35400', '#2874A6', '#7FB3D5', '#1ABC9C', '#2ECC71', 
+                        '#3498DB', '#9B59B6'
+                    ];
                 }
 
                 chartRef.current = new Chart(ctx, { 
