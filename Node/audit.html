@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Auditoría CRM - Versión 4.7</title>
+    <title>Panel de Auditoría CRM - Versión 4.8</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -102,7 +102,7 @@
                 const today = new Date(); today.setHours(0,0,0,0); proxDate.setHours(0,0,0,0);
                 const diffDays = Math.floor((today - proxDate) / (1000 * 60 * 60 * 24));
                 if (diffDays < 0) return { label: 'En tiempo', class: 'perf-en-tiempo', hex: '#059669' };
-                if (diffDays <= 2) return { label: 'Retraso', class: 'perf-retraso', hex: '#d97706' };
+                if (diffDays <= 2) return { label: 'Retraso', class: 'perf-retraso', hex: '#f59e0b' };
                 return { label: 'Acción Necesaria', class: 'perf-accion', hex: '#dc2626' };
             };
 
@@ -131,7 +131,7 @@
                 setLoading(false);
             };
 
-            if (!user) return <LoginPanel auditors={auditors} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
+            if (!user) return <LoginScreen auditors={auditors} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
 
             return (
                 <div className={`min-h-screen ${activeTheme.bg} p-4 md:p-6 transition-all`}>
@@ -153,14 +153,18 @@
                     </header>
 
                     <main className="w-full max-w-[98%] mx-auto space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[280px]">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[260px]">
                                 <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Carga / Asesoras</h3>
                                 <ChartPie data={filteredClients} groupBy="Asesora" activeColor={activeTheme.primary} />
                             </div>
-                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[280px]">
+                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[260px]">
                                 <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Embudo de Interés</h3>
                                 <ChartPie data={filteredClients} groupBy="Nivel de Interés" isInterest={true} activeColor={activeTheme.primary} />
+                            </div>
+                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[260px]">
+                                <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Análisis de Rendimiento</h3>
+                                <ChartPie data={filteredClients} groupBy="Rendimiento" activeColor={activeTheme.primary} />
                             </div>
                         </div>
 
@@ -255,10 +259,74 @@
             const canvasRef = useRef(null); const chartRef = useRef(null);
             useEffect(() => {
                 const ctx = canvasRef.current.getContext('2d'); if (chartRef.current) chartRef.current.destroy();
-                const counts = data.reduce((acc, curr) => { let key = curr[groupBy] || 'Sin definir'; if (isInterest && key.includes('<')) key = key.split(' <')[0]; acc[key] = (acc[key] || 0) + 1; return acc; }, {});
-                chartRef.current = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: [activeColor, '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#64748b'], borderWeight: 0, borderRadius: 12 }] }, options: { plugins: { legend: { position: 'right', labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: 'bold' }, usePointStyle: true, padding: 15 } } }, cutout: '72%', maintainAspectRatio: false } });
-            }, [data, activeColor]);
-            return <div className="h-48 flex items-center justify-center"><canvas ref={canvasRef}></canvas></div>;
+                
+                const counts = data.reduce((acc, curr) => { 
+                    let key;
+                    if (groupBy === 'Rendimiento') {
+                        key = curr._rendimiento?.label || 'Sin definir';
+                    } else {
+                        key = curr[groupBy] || 'Sin definir';
+                    }
+                    
+                    if (isInterest && key.includes('<')) key = key.split(' <')[0]; 
+                    acc[key] = (acc[key] || 0) + 1; 
+                    return acc; 
+                }, {});
+
+                let chartLabels, chartData, backgroundColors;
+
+                // --- MODIFICACIÓN ESPECÍFICA PARA COLORES Y ORDEN DE RENDIMIENTO ---
+                if (groupBy === 'Rendimiento') {
+                    const order = ["En tiempo", "Retraso", "Acción Necesaria"];
+                    const colorMap = {
+                        "En tiempo": "#059669",      // Verde
+                        "Retraso": "#f59e0b",        // Amarillo (Alerta)
+                        "Acción Necesaria": "#dc2626" // Rojo
+                    };
+                    
+                    // Solo incluimos las etiquetas que tengan datos y sigan el orden
+                    chartLabels = order.filter(label => counts[label] !== undefined);
+                    // Añadimos "Sin Cita" o etiquetas extra si existen pero no están en el orden
+                    Object.keys(counts).forEach(label => {
+                        if (!order.includes(label)) chartLabels.push(label);
+                    });
+
+                    chartData = chartLabels.map(label => counts[label]);
+                    backgroundColors = chartLabels.map(label => colorMap[label] || '#94a3b8');
+                } else {
+                    chartLabels = Object.keys(counts);
+                    chartData = Object.values(counts);
+                    backgroundColors = [activeColor, '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#64748b'];
+                }
+
+                chartRef.current = new Chart(ctx, { 
+                    type: 'doughnut', 
+                    data: { 
+                        labels: chartLabels, 
+                        datasets: [{ 
+                            data: chartData, 
+                            backgroundColor: backgroundColors, 
+                            borderWeight: 0, 
+                            borderRadius: 12 
+                        }] 
+                    }, 
+                    options: { 
+                        plugins: { 
+                            legend: { 
+                                position: 'right', 
+                                labels: { 
+                                    font: { family: 'Plus Jakarta Sans', size: 9, weight: 'bold' }, 
+                                    usePointStyle: true, 
+                                    padding: 12 
+                                } 
+                            } 
+                        }, 
+                        cutout: '72%', 
+                        maintainAspectRatio: false 
+                    } 
+                });
+            }, [data, activeColor, groupBy]);
+            return <div className="h-40 flex items-center justify-center"><canvas ref={canvasRef}></canvas></div>;
         };
 
         const ClientViewer = ({ client, onClose, themeHex, activeColor }) => {
@@ -298,7 +366,7 @@
             );
         };
 
-        const LoginPanel = ({ auditors, onLogin, loading, theme }) => {
+        const LoginScreen = ({ auditors, onLogin, loading, theme }) => {
             const [sel, setSel] = useState(''); const [pass, setPass] = useState('');
             return (
                 <div className="min-h-screen flex items-center justify-center bg-slate-200 p-6">
