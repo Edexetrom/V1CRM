@@ -12,12 +12,12 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; font-size: 14px; transition: all 0.3s ease; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; font-size: 13px; transition: all 0.3s ease; }
         .glass { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(12px); }
-        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .chrome-tab-container { display: flex; gap: 6px; background-color: rgba(226, 232, 240, 0.6); padding-top: 12px; padding-left: 24px; padding-right: 24px; border-top-left-radius: 2.5rem; border-top-right-radius: 2.5rem; border-bottom: 1px solid #e2e8f0; }
-        .chrome-tab { position: relative; padding: 14px 35px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; transition: all 0.2s ease; border-top-left-radius: 18px; border-top-right-radius: 18px; color: #94a3b8; min-width: 170px; display: flex; align-items: center; justify-content: center; gap: 10px; border: none; outline: none; background: transparent; }
+        .chrome-tab { position: relative; padding: 14px 35px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; transition: all 0.2s ease; border-top-left-radius: 18px; border-top-right-radius: 18px; color: #94a3b8; min-width: 150px; display: flex; align-items: center; justify-content: center; gap: 10px; border: none; outline: none; background: transparent; }
         .chrome-tab:hover:not(.chrome-tab-active) { background-color: rgba(255, 255, 255, 0.4); color: #64748b; }
         .chrome-tab-active { background-color: #ffffff !important; color: #1e293b !important; box-shadow: 0 -4px 12px rgba(0,0,0,0.05); z-index: 10; }
         .chrome-tab-active::before, .chrome-tab-active::after { content: ''; position: absolute; bottom: 0; width: 20px; height: 20px; background: transparent; pointer-events: none; }
@@ -26,11 +26,11 @@
         .perf-en-tiempo { color: #059669; background: #ecfdf5; border: 1px solid #d1fae5; }
         .perf-retraso { color: #d97706; background: #fffbeb; border: 1px solid #fef3c7; }
         .perf-accion { color: #dc2626; background: #fef2f2; border: 1px solid #fee2e2; }
-        .btn-sync { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px; background-color: white; border: 1px solid #e2e8f0; color: #64748b; font-weight: 800; font-size: 11px; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .btn-sync { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 12px; background-color: white; border: 1px solid #e2e8f0; color: #64748b; font-weight: 800; font-size: 10px; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .btn-sync:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #334155; }
     </style>
 </head>
-<body class="text-slate-900">
+<body class="text-slate-900 overflow-x-hidden">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -134,96 +134,96 @@
             if (!user) return <LoginPanel auditors={auditors} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
 
             return (
-                <div className={`min-h-screen ${activeTheme.bg} p-6 transition-all`}>
-                    <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center mb-8 bg-white p-6 rounded-[2.5rem] shadow-sm border border-white">
+                <div className={`min-h-screen ${activeTheme.bg} p-4 md:p-6 transition-all`}>
+                    <header className="w-full max-w-[98%] mx-auto flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-5 rounded-[2.5rem] shadow-sm border border-white">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{backgroundColor: activeTheme.primary}}><i className="fas fa-user-shield text-2xl"></i></div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{backgroundColor: activeTheme.primary}}><i className="fas fa-user-shield text-xl"></i></div>
                             <div>
-                                <h1 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Panel de Auditoría</h1>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Admin: <span className="text-slate-900">{user}</span> • Perfil: <span className="text-slate-600">{permisos}</span></p>
+                                <h1 className="text-lg font-black text-slate-800 uppercase tracking-tighter leading-tight">Panel de Auditoría</h1>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Admin: <span className="text-slate-900">{user}</span> • Perfil: <span className="text-slate-600">{permisos}</span></p>
                             </div>
                         </div>
                         <div className="flex items-center gap-4 mt-4 md:mt-0">
                             <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-full border border-slate-100 mr-2">
-                                {Object.keys(THEMES).map(t => <button key={t} onClick={() => {setTheme(t); localStorage.setItem('audit_theme', t);}} className={`w-6 h-6 rounded-full transition-all ${theme === t ? 'ring-2 ring-offset-1 ring-slate-300 scale-110 shadow-sm' : 'opacity-30 hover:opacity-100'}`} style={{backgroundColor: THEMES[t].primary}} />)}
+                                {Object.keys(THEMES).map(t => <button key={t} onClick={() => {setTheme(t); localStorage.setItem('audit_theme', t);}} className={`w-5 h-5 rounded-full transition-all ${theme === t ? 'ring-2 ring-offset-1 ring-slate-300 scale-110 shadow-sm' : 'opacity-30 hover:opacity-100'}`} style={{backgroundColor: THEMES[t].primary}} />)}
                             </div>
                             <button onClick={fetchAllClients} className="btn-sync" disabled={loading}><i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`} style={{color: activeTheme.primary}}></i><span className="hidden sm:inline">SYNC</span></button>
-                            <button onClick={handleLogout} className="text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"><i className="fas fa-power-off text-lg"></i></button>
+                            <button onClick={handleLogout} className="text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all p-2"><i className="fas fa-power-off text-lg"></i></button>
                         </div>
                     </header>
 
-                    <main className="max-w-7xl mx-auto space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="glass p-8 rounded-[3rem] border border-white shadow-sm min-h-[320px]">
-                                <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-6">Carga / Asesoras</h3>
+                    <main className="w-full max-w-[98%] mx-auto space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[280px]">
+                                <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Carga / Asesoras</h3>
                                 <ChartPie data={filteredClients} groupBy="Asesora" activeColor={activeTheme.primary} />
                             </div>
-                            <div className="glass p-8 rounded-[3rem] border border-white shadow-sm min-h-[320px]">
-                                <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-6">Embudo de Interés</h3>
+                            <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[280px]">
+                                <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Embudo de Interés</h3>
                                 <ChartPie data={filteredClients} groupBy="Nivel de Interés" isInterest={true} activeColor={activeTheme.primary} />
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-3 items-center">
-                            <div className="relative group">
-                                <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-500 transition-colors"></i>
-                                <input type="text" placeholder="Buscar por nombre o teléfono..." className="bg-white pl-12 pr-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200 w-64 transition-all" value={filters.nombre} onChange={e => setFilters({...filters, nombre: e.target.value})} />
+                        <div className="flex flex-wrap gap-2 items-center">
+                            <div className="relative group flex-1 min-w-[200px]">
+                                <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-500 transition-colors"></i>
+                                <input type="text" placeholder="Buscar..." className="bg-white pl-10 pr-4 py-2.5 rounded-xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200 w-full transition-all" value={filters.nombre} onChange={e => setFilters({...filters, nombre: e.target.value})} />
                             </div>
-                            <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.asesora} onChange={e => setFilters({...filters, asesora: e.target.value})}>
+                            <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.asesora} onChange={e => setFilters({...filters, asesora: e.target.value})}>
                                 <option value="">Asesoras</option>
                                 {[...new Set(clients.map(c => c.Asesora))].map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
-                            <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.interes} onChange={e => setFilters({...filters, interes: e.target.value})}>
+                            <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.interes} onChange={e => setFilters({...filters, interes: e.target.value})}>
                                 <option value="">Interés</option>
                                 {INTERES_FILTROS.map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
-                            <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.estado} onChange={e => setFilters({...filters, estado: e.target.value})}>
+                            <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.estado} onChange={e => setFilters({...filters, estado: e.target.value})}>
                                 <option value="">Estado</option>
                                 {["Seguimiento", "Venta", "Contactar más tarde", "No interesado"].map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
-                            <select className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.rendimiento} onChange={e => setFilters({...filters, rendimiento: e.target.value})}>
+                            <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs outline-none border border-transparent focus:border-slate-200" value={filters.rendimiento} onChange={e => setFilters({...filters, rendimiento: e.target.value})}>
                                 <option value="">Rendimiento</option>
                                 {["En tiempo", "Retraso", "Acción Necesaria"].map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
-                            <button className="bg-white px-6 py-3 rounded-2xl shadow-sm font-bold text-xs text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setFilters({ nombre: '', asesora:'', interes:'', estado:'', rendimiento:'' })}>Limpiar</button>
+                            <button className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setFilters({ nombre: '', asesora:'', interes:'', estado:'', rendimiento:'' })}>Limpiar</button>
                             <div className="flex-1"></div>
-                            {permisos !== PERMISOS.VISUALIZADOR && <button className="text-white px-8 py-3 rounded-2xl shadow-lg font-bold text-xs uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2" style={{backgroundColor: activeTheme.primary}} onClick={handleExportCSV}><i className="fas fa-file-csv"></i> EXPORTAR CSV</button>}
+                            {permisos !== PERMISOS.VISUALIZADOR && <button className="text-white px-6 py-2.5 rounded-xl shadow-lg font-bold text-[10px] uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2" style={{backgroundColor: activeTheme.primary}} onClick={handleExportCSV}><i className="fas fa-file-csv"></i> EXPORTAR</button>}
                         </div>
 
-                        <div className="bg-white rounded-[3.5rem] shadow-xl overflow-hidden border border-white">
+                        <div className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-white">
                             <div className="overflow-x-auto custom-scroll">
-                                <table className="w-full text-left">
+                                <table className="w-full text-left table-auto">
                                     <thead className="bg-slate-50/50 border-b border-slate-100">
-                                        <tr className="text-slate-400 text-[10px] uppercase font-black tracking-widest">
-                                            <th className="px-10 py-6">Asesora</th>
-                                            <th className="px-10 py-6">Nombre Cliente</th>
-                                            <th className="px-10 py-6">Teléfono</th>
-                                            <th className="px-10 py-6">Nivel Interés</th>
-                                            <th className="px-10 py-6">Fecha Registro</th>
-                                            <th className="px-10 py-6">Próxima Cita</th>
-                                            <th className="px-10 py-6">Estado</th>
-                                            <th className="px-10 py-6">Rendimiento</th>
-                                            <th className="px-10 py-6 text-right pr-14">Acción</th>
+                                        <tr className="text-slate-400 text-[9px] uppercase font-black tracking-widest">
+                                            <th className="px-5 py-4">Asesora</th>
+                                            <th className="px-5 py-4">Nombre Cliente</th>
+                                            <th className="px-5 py-4">Teléfono</th>
+                                            <th className="px-5 py-4">Interés</th>
+                                            <th className="px-5 py-4">Registro</th>
+                                            <th className="px-5 py-4">Cita</th>
+                                            <th className="px-5 py-4">Estado</th>
+                                            <th className="px-5 py-4">Rendimiento</th>
+                                            <th className="px-5 py-4 text-right pr-8">Acción</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {filteredClients.length > 0 ? filteredClients.map((c, i) => (
                                             <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                <td className="px-10 py-5"><span className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase border inline-block ${c._rendimiento.class}`}>{c.Asesora}</span></td>
-                                                <td className="px-10 py-5 font-bold text-slate-700 text-xs">{c.Nombre}</td>
-                                                <td className="px-10 py-5 text-xs text-slate-500">{c['Canal (Tel/WhatsApp)'] || c['Canal'] || '--'}</td>
-                                                <td className="px-10 py-5">
-                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${c['Nivel de Interés'] && c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                <td className="px-5 py-3.5"><span className={`px-2.5 py-1 rounded-lg font-black text-[9px] uppercase border inline-block ${c._rendimiento.class}`}>{c.Asesora}</span></td>
+                                                <td className="px-5 py-3.5 font-bold text-slate-700 text-[11px] whitespace-nowrap">{c.Nombre}</td>
+                                                <td className="px-5 py-3.5 text-[11px] text-slate-500 whitespace-nowrap">{c['Canal (Tel/WhatsApp)'] || c['Canal'] || '--'}</td>
+                                                <td className="px-5 py-3.5">
+                                                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${c['Nivel de Interés'] && c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
                                                         {c['Nivel de Interés'] ? c['Nivel de Interés'].split(' <')[0] : 'N/A'}
                                                     </span>
                                                 </td>
-                                                <td className="px-10 py-5 text-xs text-slate-500">{c['Fecha 1er Contacto'] || '--'}</td>
-                                                <td className="px-10 py-5 text-xs font-bold text-slate-500">{c['Fecha Próx. Contacto'] || '--'}</td>
-                                                <td className="px-10 py-5 text-[10px] font-black uppercase text-slate-400">{c['Estado Final']}</td>
-                                                <td className="px-10 py-5"><span className={`text-[10px] font-black uppercase ${c._rendimiento.class.split(' ')[0]}`}>{c._rendimiento.label}</span></td>
-                                                <td className="px-10 py-5 text-right pr-14 flex justify-end gap-2">
-                                                    <button onClick={() => setModalClient(c)} className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center border border-slate-100 hover:bg-slate-50 text-slate-300 hover:text-slate-600 transition-all"><i className="fas fa-folder-open text-base"></i></button>
-                                                    {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c.Nombre)} className="w-10 h-10 rounded-xl bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all"><i className="fas fa-trash-alt text-base"></i></button>}
+                                                <td className="px-5 py-3.5 text-[11px] text-slate-500 whitespace-nowrap">{c['Fecha 1er Contacto'] || '--'}</td>
+                                                <td className="px-5 py-3.5 text-[11px] font-bold text-slate-500 whitespace-nowrap">{c['Fecha Próx. Contacto'] || '--'}</td>
+                                                <td className="px-5 py-3.5 text-[9px] font-black uppercase text-slate-400">{c['Estado Final']}</td>
+                                                <td className="px-5 py-3.5"><span className={`text-[9px] font-black uppercase ${c._rendimiento.class.split(' ')[0]}`}>{c._rendimiento.label}</span></td>
+                                                <td className="px-5 py-3.5 text-right pr-8 flex justify-end gap-2">
+                                                    <button onClick={() => setModalClient(c)} className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-slate-100 hover:bg-slate-50 text-slate-300 hover:text-slate-600 transition-all"><i className="fas fa-folder-open text-xs"></i></button>
+                                                    {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c.Nombre)} className="w-8 h-8 rounded-lg bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all"><i className="fas fa-trash-alt text-xs"></i></button>}
                                                 </td>
                                             </tr>
                                         )) : <tr><td colSpan="9" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Sin resultados</td></tr>}
@@ -236,12 +236,12 @@
                     {deleteConfirmation && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl border border-white text-center animate-in zoom-in duration-200">
-                                <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6"><i className="fas fa-exclamation-triangle text-3xl"></i></div>
-                                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2">Confirmar Eliminación</h3>
-                                <p className="text-slate-400 text-sm font-medium mb-8 leading-relaxed">Estás a punto de borrar el expediente de <span className="text-slate-800 font-bold">{deleteConfirmation}</span>.<br/> Esto eliminará la fila en Sheets y enviará la carpeta de Drive a la papelera.</p>
+                                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6"><i className="fas fa-exclamation-triangle text-2xl"></i></div>
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter mb-2">Confirmar Eliminación</h3>
+                                <p className="text-slate-400 text-xs font-medium mb-8 leading-relaxed">Estás a punto de borrar el expediente de <span className="text-slate-800 font-bold">{deleteConfirmation}</span>.</p>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <button onClick={() => setDeleteConfirmation(null)} className="py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
-                                    <button onClick={executeDelete} className="py-4 bg-red-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-200">Confirmar</button>
+                                    <button onClick={() => setDeleteConfirmation(null)} className="py-3.5 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[9px] tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
+                                    <button onClick={executeDelete} className="py-3.5 bg-red-500 text-white rounded-2xl font-black uppercase text-[9px] tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-200">Confirmar</button>
                                 </div>
                             </div>
                         </div>
@@ -256,9 +256,9 @@
             useEffect(() => {
                 const ctx = canvasRef.current.getContext('2d'); if (chartRef.current) chartRef.current.destroy();
                 const counts = data.reduce((acc, curr) => { let key = curr[groupBy] || 'Sin definir'; if (isInterest && key.includes('<')) key = key.split(' <')[0]; acc[key] = (acc[key] || 0) + 1; return acc; }, {});
-                chartRef.current = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: [activeColor, '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#64748b'], borderWeight: 0, borderRadius: 12 }] }, options: { plugins: { legend: { position: 'right', labels: { font: { family: 'Plus Jakarta Sans', size: 11, weight: 'bold' }, usePointStyle: true, padding: 25 } } }, cutout: '72%', maintainAspectRatio: false } });
+                chartRef.current = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: [activeColor, '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#64748b'], borderWeight: 0, borderRadius: 12 }] }, options: { plugins: { legend: { position: 'right', labels: { font: { family: 'Plus Jakarta Sans', size: 10, weight: 'bold' }, usePointStyle: true, padding: 15 } } }, cutout: '72%', maintainAspectRatio: false } });
             }, [data, activeColor]);
-            return <div className="h-56 flex items-center justify-center"><canvas ref={canvasRef}></canvas></div>;
+            return <div className="h-48 flex items-center justify-center"><canvas ref={canvasRef}></canvas></div>;
         };
 
         const ClientViewer = ({ client, onClose, themeHex, activeColor }) => {
@@ -266,33 +266,33 @@
             const followUps = useMemo(() => { let list = []; for(let i=1; i<=30; i++) { if(client[`Fecha Seguimiento ${i}`]) list.push({ n: i, fecha: client[`Fecha Seguimiento ${i}`], nota: client[`Notas Seguimiento ${i}`] }); } return list; }, [client]);
             return (
                 <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-5xl rounded-[4rem] shadow-2xl flex flex-col h-[90vh] overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-white">
-                            <div><h3 className="text-2xl font-black text-slate-800 tracking-tighter leading-none">{client.Nombre}</h3><p className="text-[10px] font-black text-slate-300 mt-3 tracking-[0.2em] uppercase">Auditoría de Expediente Digital</p></div>
-                            <button onClick={onClose} className="w-12 h-12 rounded-full bg-white shadow-md flex items-center justify-center text-slate-300 hover:text-red-500 transition-all border-none outline-none"><i className="fas fa-times text-xl"></i></button>
+                    <div className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden animate-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white">
+                            <div><h3 className="text-xl font-black text-slate-800 tracking-tighter leading-none">{client.Nombre}</h3><p className="text-[9px] font-black text-slate-300 mt-2 tracking-[0.15em] uppercase">Auditoría de Expediente Digital</p></div>
+                            <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-all border-none outline-none"><i className="fas fa-times text-lg"></i></button>
                         </div>
                         <div className="chrome-tab-container">
-                            <button onClick={() => setTab('base')} className={`chrome-tab ${tab === 'base' ? 'chrome-tab-active' : ''}`} style={tab === 'base' ? {color: activeColor} : {}}><i className="fas fa-id-card text-sm"></i> Ficha Base</button>
-                            <button onClick={() => setTab('hist')} className={`chrome-tab ${tab === 'hist' ? 'chrome-tab-active' : ''}`} style={tab === 'hist' ? {color: activeColor} : {}}><i className="fas fa-history text-sm"></i> Gestiones ({followUps.length})</button>
-                            <button onClick={() => setTab('comm')} className={`chrome-tab ${tab === 'comm' ? 'chrome-tab-active' : ''}`} style={tab === 'comm' ? {color: activeColor} : {}}><i className="fas fa-sticky-note text-sm"></i> Notas Libres</button>
+                            <button onClick={() => setTab('base')} className={`chrome-tab ${tab === 'base' ? 'chrome-tab-active' : ''}`} style={tab === 'base' ? {color: activeColor} : {}}><i className="fas fa-id-card text-xs"></i> Ficha Base</button>
+                            <button onClick={() => setTab('hist')} className={`chrome-tab ${tab === 'hist' ? 'chrome-tab-active' : ''}`} style={tab === 'hist' ? {color: activeColor} : {}}><i className="fas fa-history text-xs"></i> Gestiones ({followUps.length})</button>
+                            <button onClick={() => setTab('comm')} className={`chrome-tab ${tab === 'comm' ? 'chrome-tab-active' : ''}`} style={tab === 'comm' ? {color: activeColor} : {}}><i className="fas fa-sticky-note text-xs"></i> Notas Libres</button>
                         </div>
-                        <div className="flex-1 p-12 overflow-y-auto custom-scroll bg-white">
+                        <div className="flex-1 p-8 overflow-y-auto custom-scroll bg-white">
                             {tab === 'base' && (
                                 <div className="animate-in fade-in duration-300">
-                                    <div className="grid grid-cols-2 gap-10">
-                                        <div className="space-y-2"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Asesora a Cargo</p><div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-600 text-xs italic">{client.Asesora}</div></div>
-                                        <div className="space-y-2"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Canal de Contacto</p><div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-600 text-xs">{client['Canal (Tel/WhatsApp)'] || client['Canal']}</div></div>
-                                        <div className="space-y-2"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Fecha de Registro</p><div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-600 text-xs">{client['Fecha 1er Contacto']}</div></div>
-                                        <div className="space-y-2"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Nivel de Interés Actual</p><div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-600 text-xs">{client['Nivel de Interés']}</div></div>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Asesora a Cargo</p><div className="p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-600 text-[11px] italic">{client.Asesora}</div></div>
+                                        <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Canal de Contacto</p><div className="p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-600 text-[11px]">{client['Canal (Tel/WhatsApp)'] || client['Canal']}</div></div>
+                                        <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Fecha de Registro</p><div className="p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-600 text-[11px]">{client['Fecha 1er Contacto']}</div></div>
+                                        <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Nivel de Interés Actual</p><div className="p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-600 text-[11px]">{client['Nivel de Interés']}</div></div>
                                     </div>
-                                    <div className="mt-8 flex justify-center"><button onClick={() => window.open(client.Imagenes, '_blank')} className="px-10 py-5 bg-blue-50 text-blue-600 border-2 border-blue-100 rounded-[2.5rem] font-black uppercase text-xs tracking-widest hover:bg-blue-100 transition-all flex items-center gap-4 shadow-sm"><i className="fab fa-google-drive text-2xl"></i> EXAMINAR EVIDENCIAS EN GOOGLE DRIVE</button></div>
-                                    <div className="col-span-2 space-y-2 mt-8"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Bitácora de Apertura</p><div className="p-10 bg-slate-50 border border-slate-100 rounded-[3rem] text-sm text-slate-500 italic leading-relaxed">"{client['Resumen Conversación']}"</div></div>
+                                    <div className="mt-6 flex justify-center"><button onClick={() => window.open(client.Imagenes, '_blank')} className="px-8 py-4 bg-blue-50 text-blue-600 border border-blue-100 rounded-[2rem] font-black uppercase text-[10px] tracking-widest hover:bg-blue-100 transition-all flex items-center gap-3 shadow-sm"><i className="fab fa-google-drive text-xl"></i> EXAMINAR EVIDENCIAS</button></div>
+                                    <div className="col-span-2 space-y-1.5 mt-6"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Bitácora de Apertura</p><div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] text-xs text-slate-500 italic leading-relaxed">"{client['Resumen Conversación']}"</div></div>
                                 </div>
                             )}
-                            {tab === 'hist' && <div className="space-y-8 animate-in slide-in-from-right-4 duration-300 max-w-4xl mx-auto">{followUps.length > 0 ? followUps.map(s => <div key={s.n} className="p-8 border-l-4 border-slate-100 bg-slate-50 rounded-r-[3rem] shadow-sm"><div className="flex justify-between items-center mb-4"><span className="text-[11px] font-black uppercase tracking-[0.2em]" style={{color: activeColor}}>Gestión #{s.n}</span><span className="text-[10px] font-bold text-slate-400 italic">{s.fecha}</span></div><p className="text-xs text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{s.nota}</p></div>) : <div className="text-center py-24 opacity-10"><i className="fas fa-history text-7xl mb-6"></i><p className="font-black uppercase text-sm tracking-widest">Sin gestiones registradas</p></div>}</div>}
-                            {tab === 'comm' && <div className="p-12 bg-slate-50 border border-slate-100 rounded-[4rem] text-xs h-full text-slate-500 whitespace-pre-wrap leading-relaxed animate-in zoom-in-95 duration-300">{client['Comentarios'] || "Sin observaciones adicionales."}</div>}
+                            {tab === 'hist' && <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 max-w-4xl mx-auto">{followUps.length > 0 ? followUps.map(s => <div key={s.n} className="p-5 border-l-4 border-slate-100 bg-slate-50 rounded-r-[2rem] shadow-sm"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-black uppercase tracking-[0.15em]" style={{color: activeColor}}>Gestión #{s.n}</span><span className="text-[9px] font-bold text-slate-400 italic">{s.fecha}</span></div><p className="text-[11px] text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{s.nota}</p></div>) : <div className="text-center py-16 opacity-10"><i className="fas fa-history text-5xl mb-4"></i><p className="font-black uppercase text-xs tracking-widest">Sin gestiones</p></div>}</div>}
+                            {tab === 'comm' && <div className="p-8 bg-slate-50 border border-slate-100 rounded-[3rem] text-[11px] h-full text-slate-500 whitespace-pre-wrap leading-relaxed animate-in zoom-in-95 duration-300">{client['Comentarios'] || "Sin observaciones adicionales."}</div>}
                         </div>
-                        <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex justify-end"><button onClick={onClose} className="px-10 py-4 bg-white text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all shadow-sm border border-slate-100">Cerrar Visor</button></div>
+                        <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex justify-end"><button onClick={onClose} className="px-8 py-3 bg-white text-slate-400 font-black uppercase text-[9px] tracking-widest hover:bg-slate-100 rounded-xl transition-all shadow-sm border border-slate-100">Cerrar Visor</button></div>
                     </div>
                 </div>
             );
@@ -302,13 +302,13 @@
             const [sel, setSel] = useState(''); const [pass, setPass] = useState('');
             return (
                 <div className="min-h-screen flex items-center justify-center bg-slate-200 p-6">
-                    <div className="max-w-md w-full glass p-14 rounded-[4rem] shadow-2xl text-center border border-white animate-in zoom-in duration-500">
-                        <div className="w-24 h-24 mx-auto rounded-[2.5rem] flex items-center justify-center text-white mb-8 shadow-2xl" style={{backgroundColor: theme.primary}}><i className="fas fa-shield-alt text-4xl"></i></div>
-                        <h2 className="text-3xl font-black text-slate-800 uppercase tracking-tighter mb-10 leading-none">Acceso<br/>Administración</h2>
-                        <div className="space-y-6 text-left">
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">Credencial Auditor</label><select className="w-full p-5 rounded-3xl bg-slate-50 font-bold text-sm outline-none shadow-inner border-none" value={sel} onChange={e => setSel(e.target.value)}><option value="">Seleccionar Perfil...</option>{auditors.map(a => <option key={a} value={a}>{a}</option>)}</select></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">Clave de Seguridad</label><input type="password" placeholder="••••••••" className="w-full p-5 rounded-3xl bg-slate-50 font-bold text-sm outline-none shadow-inner border-none" value={pass} onChange={e => setPass(e.target.value)} /></div>
-                            <button onClick={() => onLogin(sel, pass)} disabled={loading || !sel || !pass} className="w-full py-5 mt-4 rounded-3xl text-white font-black text-xl shadow-2xl transition-all hover:brightness-110 active:scale-95 uppercase tracking-tighter" style={{backgroundColor: theme.primary}}>{loading ? 'AUTENTICANDO...' : 'INICIAR SESIÓN'}</button>
+                    <div className="max-w-md w-full glass p-12 rounded-[3.5rem] shadow-2xl text-center border border-white animate-in zoom-in duration-500">
+                        <div className="w-20 h-20 mx-auto rounded-[2rem] flex items-center justify-center text-white mb-6 shadow-2xl" style={{backgroundColor: theme.primary}}><i className="fas fa-shield-alt text-3xl"></i></div>
+                        <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter mb-8 leading-none">Acceso<br/>Administración</h2>
+                        <div className="space-y-5 text-left">
+                            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase ml-4 tracking-widest">Credencial Auditor</label><select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs outline-none shadow-inner border-none" value={sel} onChange={e => setSel(e.target.value)}><option value="">Seleccionar Perfil...</option>{auditors.map(a => <option key={a} value={a}>{a}</option>)}</select></div>
+                            <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase ml-4 tracking-widest">Clave de Seguridad</label><input type="password" placeholder="••••••••" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs outline-none shadow-inner border-none" value={pass} onChange={e => setPass(e.target.value)} /></div>
+                            <button onClick={() => onLogin(sel, pass)} disabled={loading || !sel || !pass} className="w-full py-4 mt-2 rounded-2xl text-white font-black text-base shadow-2xl transition-all hover:brightness-110 active:scale-95 uppercase tracking-tighter" style={{backgroundColor: theme.primary}}>{loading ? 'AUTENTICANDO...' : 'INICIAR SESIÓN'}</button>
                         </div>
                     </div>
                 </div>
