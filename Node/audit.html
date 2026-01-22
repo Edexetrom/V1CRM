@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Auditoría CRM - Versión 4.8</title>
+    <title>Panel de Auditoría CRM - Versión 4.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -122,6 +122,17 @@
                 );
             }, [processedClients, filters]);
 
+            // --- NUEVO CONTADOR DE RENDIMIENTO ---
+            const statsRendimiento = useMemo(() => {
+                const counts = { "En tiempo": 0, "Retraso": 0, "Acción Necesaria": 0 };
+                filteredClients.forEach(c => {
+                    if (counts.hasOwnProperty(c._rendimiento.label)) {
+                        counts[c._rendimiento.label]++;
+                    }
+                });
+                return counts;
+            }, [filteredClients]);
+
             const executeDelete = async () => {
                 const nombre = deleteConfirmation; setDeleteConfirmation(null); setLoading(true);
                 try {
@@ -153,6 +164,31 @@
                     </header>
 
                     <main className="w-full max-w-[98%] mx-auto space-y-6">
+                        {/* --- BLOQUE DE CONTADORES DE RENDIMIENTO --- */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+                            <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-white flex items-center justify-between">
+                                <div>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">En Tiempo</p>
+                                    <h4 className="text-2xl font-black text-emerald-600">{statsRendimiento["En tiempo"]}</h4>
+                                </div>
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 text-xl shadow-inner"><i className="fas fa-check-circle"></i></div>
+                            </div>
+                            <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-white flex items-center justify-between">
+                                <div>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Atención</p>
+                                    <h4 className="text-2xl font-black text-amber-500">{statsRendimiento["Retraso"]}</h4>
+                                </div>
+                                <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 text-xl shadow-inner"><i className="fas fa-clock"></i></div>
+                            </div>
+                            <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-white flex items-center justify-between">
+                                <div>
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Acción Necesaria</p>
+                                    <h4 className="text-2xl font-black text-red-500">{statsRendimiento["Acción Necesaria"]}</h4>
+                                </div>
+                                <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 text-xl shadow-inner"><i className="fas fa-exclamation-circle"></i></div>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[260px]">
                                 <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Carga / Asesoras</h3>
@@ -293,8 +329,6 @@
                 } else {
                     chartLabels = Object.keys(counts);
                     chartData = Object.values(counts);
-                    
-                    // --- PALETA DE ALTO CONTRASTE (50 COLORES PARA 25 ASESORAS) ---
                     backgroundColors = [
                         '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', 
                         '#E7E9ED', '#8AC7DB', '#F44336', '#E91E63', '#9C27B0', '#673AB7', 
