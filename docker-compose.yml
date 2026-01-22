@@ -15,6 +15,10 @@ services:
     ports:
       - "5000"
 
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+
   # Servidor Web (Node.js) - Punto de entrada
   frontend:
     build:
@@ -30,6 +34,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=80
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
 
 networks:
   default:
