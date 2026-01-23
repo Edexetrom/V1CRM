@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from data_handler import DataHandler
 import logging
@@ -12,6 +12,15 @@ app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Soporte para ráfagas de 
 CORS(app)
 
 handler = DataHandler()
+
+@app.route('/api/download-journal')
+def download_journal():
+    # Asegúrate de que la ruta coincida con la que viste en la terminal
+    path = "data/journal.jsonl" 
+    try:
+        return send_file(path, as_attachment=True)
+    except Exception as e:
+        return str(e)
 
 @app.route('/api/agents', methods=['GET'])
 def get_agents():
