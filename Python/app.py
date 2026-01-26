@@ -93,6 +93,22 @@ def update_client():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# --- NUEVA RUTA: ELIMINAR CLIENTE (AUDITORÍA) ---
+@app.route('/api/delete-client', methods=['POST'])
+def delete_client():
+    try:
+        data = request.json
+        nombre = data.get('nombre')
+        if not nombre:
+            return jsonify({"status": "error", "message": "Falta nombre del cliente"}), 400
+        
+        # El handler debe procesar el borrado en Sheets y avisar al script de Google para la carpeta
+        success, message = handler.delete_client(nombre)
+        return jsonify({"status": "success" if success else "error", "message": message})
+    except Exception as e:
+        logger.error(f"Error en delete_client: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/login', methods=['POST'])
 def login():
     try:
@@ -118,4 +134,5 @@ def get_auditors_list():
     except: return jsonify([])
 
 if __name__ == '__main__':
+    # Cambiado debug a True para pruebas locales como solicitaste
     app.run(debug=True, port=5000)

@@ -28,7 +28,6 @@
         .perf-accion { color: #dc2626; background: #fef2f2; border: 1px solid #fee2e2; }
         .btn-sync { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 12px; background-color: white; border: 1px solid #e2e8f0; color: #64748b; font-weight: 800; font-size: 10px; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .btn-sync:hover { background-color: #f8fafc; border-color: #cbd5e1; color: #334155; }
-        /* Terminal Style for Journal Viewer */
         .journal-box { background: #0f172a; color: #10b981; font-family: 'Courier New', Courier, monospace; font-size: 11px; padding: 20px; border-radius: 1.5rem; overflow-y: auto; max-height: 500px; line-height: 1.6; border: 1px solid #1e293b; }
     </style>
 </head>
@@ -54,11 +53,9 @@
             const [theme, setTheme] = useState(() => localStorage.getItem('audit_theme') || 'ocean');
             const [loading, setLoading] = useState(false);
             
-            // --- NUEVOS ESTADOS DE AUDITORÍA ---
-            const [mainTab, setMainTab] = useState('dashboard'); // dashboard, cola, journal
+            const [mainTab, setMainTab] = useState('dashboard'); 
             const [localQueue, setLocalQueue] = useState([]);
             const [journalLines, setJournalLines] = useState([]);
-            // -----------------------------------
 
             const [clients, setClients] = useState([]);
             const [filters, setFilters] = useState({ nombre: '', asesora: '', interes: '', estado: '', rendimiento: '' });
@@ -99,7 +96,6 @@
                 setLoading(false); 
             };
 
-            // --- FUNCIONES DE CAPA 2 Y 3 ---
             const fetchSyncQueue = async () => {
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/sync-queue');
@@ -154,7 +150,7 @@
                 const [d, m, y] = proxStr.split('/').map(Number);
                 const proxDate = new Date(y, m - 1, d);
                 
-                // CORRECCIÓN DE FECHA MEXICO: Obtenemos el "hoy" real en MX para comparar
+                // CORRECCIÓN MÉXICO: Sincronización horaria para evitar desfase a las 6:00 PM
                 const today = new Date(new Intl.DateTimeFormat('en-US', {timeZone: 'America/Mexico_City'}).format(new Date()));
                 today.setHours(0,0,0,0); 
                 proxDate.setHours(0,0,0,0);
@@ -192,10 +188,21 @@
             }, [filteredClients]);
 
             const executeDelete = async () => {
-                const nombre = deleteConfirmation; setDeleteConfirmation(null); setLoading(true);
+                const nombre = deleteConfirmation; 
+                setDeleteConfirmation(null); 
+                setLoading(true);
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/delete-client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre }) });
-                    if (res.ok) refreshAll();
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/delete-client', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ nombre }) 
+                    });
+                    if (res.ok) {
+                        refreshAll();
+                    } else {
+                        const err = await res.json();
+                        alert("Error: " + (err.message || "No se pudo eliminar"));
+                    }
                 } catch (e) { alert("Error al eliminar."); }
                 setLoading(false);
             };
@@ -231,7 +238,6 @@
                         </div>
                     </header>
 
-                    {/* NAVEGACIÓN DE PESTAÑAS */}
                     <div className="w-full max-w-[98%] mx-auto chrome-tab-container mb-0">
                         <button onClick={() => setMainTab('dashboard')} className={`chrome-tab ${mainTab === 'dashboard' ? 'chrome-tab-active' : ''}`} style={mainTab === 'dashboard' ? {color: activeTheme.primary} : {}}><i className="fas fa-chart-line text-xs"></i> Dashboard</button>
                         <button onClick={() => setMainTab('cola')} className={`chrome-tab ${mainTab === 'cola' ? 'chrome-tab-active' : ''}`} style={mainTab === 'cola' ? {color: activeTheme.primary} : {}}>
@@ -243,7 +249,6 @@
 
                     <main className="w-full max-w-[98%] mx-auto glass p-8 rounded-b-[2.5rem] rounded-tr-[2.5rem] shadow-xl border border-white min-h-[600px]">
                         
-                        {/* CONTENIDO 1: DASHBOARD ORIGINAL */}
                         {mainTab === 'dashboard' && (
                             <div className="space-y-6 animate-in fade-in duration-500">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
@@ -355,7 +360,6 @@
                             </div>
                         )}
 
-                        {/* CONTENIDO 2: COLA DE SINCRONIZACIÓN */}
                         {mainTab === 'cola' && (
                             <div className="space-y-6 animate-in slide-in-from-left-4 duration-500">
                                 <div className="bg-orange-50 p-6 rounded-[2rem] border border-orange-100 flex items-center justify-between">
@@ -393,7 +397,6 @@
                             </div>
                         )}
 
-                        {/* CONTENIDO 3: VISOR DE JOURNAL */}
                         {mainTab === 'journal' && (
                             <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
                                 <div className="flex items-center justify-between px-2">
