@@ -138,7 +138,6 @@
                     processQueue();
                 }
                 
-                // --- ACTIVADOR POR TIEMPO: 2 MINUTOS (120000ms) ---
                 const timer = setInterval(() => {
                     console.log("[SISTEMA] Disparo programado de 2 minutos ejecutado.");
                     processQueue();
@@ -147,7 +146,6 @@
                 return () => clearInterval(timer);
             }, [user]);
 
-            // Lógica de Sincronización Local
             const processQueue = async () => {
                 const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
                 setPendingCount(queue.length);
@@ -182,12 +180,11 @@
                 }
             };
 
-            // --- ACTIVADOR POR CIERRE DE MODAL (NUEVO) ---
             const handleCloseModal = () => {
                 console.log("[SISTEMA] Modal cerrado. Disparando sincronización inmediata.");
                 setModal(null);
                 setSelectedClient(null);
-                processQueue(); // Disparo proactivo
+                processQueue(); 
             };
 
             const fetchAgents = async () => {
@@ -395,7 +392,11 @@
                         </div>
                     </main>
 
-                    {statusAlert && <StatusModal alert={statusAlert} onClose={() => setStatusAlert(null)} />}
+                    {statusAlert && <StatusModal alert={statusAlert} onClose={() => {
+                        const isSuccess = statusAlert.type === 'success';
+                        setStatusAlert(null);
+                        if (isSuccess && user) fetchClients(user);
+                    }} />}
                     {modal === 'new' && <NewClientModal theme={activeTheme} user={user} onClose={handleCloseModal} onRefresh={() => fetchClients(user)} setStatus={setStatusAlert} onQueueChange={setPendingCount} />}
                     {modal === 'edit' && <EditClientModal theme={activeTheme} client={selectedClient} onClose={handleCloseModal} onRefresh={() => fetchClients(user)} setStatus={setStatusAlert} onQueueChange={setPendingCount} />}
                 </div>

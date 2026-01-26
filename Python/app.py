@@ -2,25 +2,39 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from data_handler import DataHandler
 import logging
+import threading
+import os
+import time
 
-# Configuración de Logging para monitoreo de tráfico
-logging.basicConfig(level=logging.INFO)
+# Configuración de Zona Horaria para el Servidor
+os.environ['TZ'] = 'America/Mexico_City'
+if hasattr(time, 'tzset'):
+    time.tzset()
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # Soporte para ráfagas de imágenes
+app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024 
 CORS(app)
 
 handler = DataHandler()
 
-@app.route('/api/download-journal')
-def download_journal():
-    # Asegúrate de que la ruta coincida con la que viste en la terminal
-    path = "data/journal.jsonl" 
-    try:
-        return send_file(path, as_attachment=True)
-    except Exception as e:
-        return str(e)
+# --- HILO TRABAJADOR (WORKER) PARA COLA SQLITE ---
+def start_worker():
+    def run():
+        logger.info("Hilo Trabajador (Worker) LOCAL iniciado.")
+        while True:
+            try:
+                handler.process_queue_step()
+            except Exception as e:
+                logger.error(f"Error en worker local: {e}")
+            time.sleep(5)
+    
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+
+start_worker()
 
 @app.route('/api/agents', methods=['GET'])
 def get_agents():
@@ -28,21 +42,6 @@ def get_agents():
         agents_data = handler.get_active_agents()
         return jsonify([a['nombre'] for a in agents_data])
     except Exception as e:
-        logger.error(f"Error en get_agents: {e}")
-        return jsonify([]), 500
-
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    asesora = request.args.get('asesora')
-    if not asesora: return jsonify({"status": "error", "message": "Falta parámetro asesora"}), 400
-    return jsonify(handler.get_agent_stats(asesora))
-
-@app.route('/api/auditors', methods=['GET'])
-def get_auditors():
-    try:
-        audit_data = handler.get_auditors()
-        return jsonify([a['Nombre'] for a in audit_data])
-    except:
         return jsonify([]), 500
 
 @app.route('/api/login-audit', methods=['POST'])
@@ -53,40 +52,44 @@ def login_audit():
         password = str(data.get('password'))
         auditors = handler.get_auditors()
         auditor = next((a for a in auditors if a['Nombre'] == name), None)
-        
-        if not auditor: 
-            return jsonify({"status": "error", "message": "Auditor no encontrado"}), 404
-        
-        stored_password = str(auditor.get('Contraseña', '')).strip()
-        if not stored_password or stored_password == '0' or stored_password.lower() == 'none':
-            if handler.set_auditor_password(name, password, "Visualizador"):
-                return jsonify({"status": "success", "nombre": name, "permisos": "Visualizador", "message": "Auto-registro exitoso"})
-            else:
-                return jsonify({"status": "error", "message": "Error al registrar credenciales"}), 500
-
-        if stored_password == password:
+        if not auditor: return jsonify({"status": "error", "message": "No encontrado"}), 404
+        if str(auditor.get('Contraseña', '')).strip() == password:
             return jsonify({"status": "success", "nombre": name, "permisos": auditor['Permisos']})
-            
         return jsonify({"status": "error", "message": "Clave incorrecta"}), 401
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/all-clients', methods=['GET'])
 def get_all_clients():
-    try:
-        data = handler.get_all_clients()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"status": "error", "message": "Error al obtener clientes"}), 500
+    return jsonify(handler.get_all_clients())
 
-@app.route('/api/delete-client', methods=['POST'])
-def delete_client():
+@app.route('/api/download-journal', methods=['GET'])
+def download_journal():
+    path = handler.get_journal_path()
+    if os.path.exists(path): return send_file(path, as_attachment=True)
+    return jsonify({"status": "error"}), 404
+
+@app.route('/api/download-db', methods=['GET'])
+def download_db():
+    path = handler.get_db_path()
+    if os.path.exists(path): return send_file(path, as_attachment=True)
+    return jsonify({"status": "error"}), 404
+
+@app.route('/api/add-client', methods=['POST'])
+def add_client():
     try:
         data = request.json
-        nombre = data.get('nombre')
-        if handler.delete_client_and_folder(nombre):
-            return jsonify({"status": "success", "message": "Expediente eliminado correctamente"})
-        return jsonify({"status": "error", "message": "No se pudo eliminar el expediente"}), 500
+        success, message = handler.enqueue_client_data("ADD", data)
+        return jsonify({"status": "success" if success else "error", "message": message})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/update-client-advanced', methods=['POST'])
+def update_client():
+    try:
+        data = request.json
+        success, message = handler.enqueue_client_data("UPDATE", data)
+        return jsonify({"status": "success" if success else "error", "message": message})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -94,56 +97,25 @@ def delete_client():
 def login():
     try:
         data = request.json
-        name = data.get('nombre')
-        password = str(data.get('password'))
+        name = data.get('nombre'); password = str(data.get('password'))
         agents = handler.get_active_agents()
         agent = next((a for a in agents if a['nombre'] == name), None)
-        
-        if not agent: 
-            return jsonify({"status": "error", "message": "Asesora no encontrada"}), 404
-        
-        stored_password = str(agent.get('password', '')).strip()
-        if not stored_password or stored_password == '0' or stored_password.lower() == 'none':
-            if handler.set_agent_password(name, password):
-                return jsonify({"status": "success", "nombre": name, "message": "Clave registrada correctamente"})
-            else:
-                return jsonify({"status": "error", "message": "Fallo en auto-registro de clave"}), 500
-
-        if stored_password == password: 
+        if agent and str(agent.get('password', '')).strip() == password:
             return jsonify({"status": "success", "nombre": name})
-            
-        return jsonify({"status": "error", "message": "Clave incorrecta"}), 401
-    except Exception as e: 
-        return jsonify({"status": "error", "message": "Error interno del servidor"}), 500
+        return jsonify({"status": "error", "message": "Credenciales inválidas"}), 401
+    except: return jsonify({"status": "error"}), 500
 
 @app.route('/api/clients', methods=['GET'])
 def get_clients():
     asesora = request.args.get('asesora')
-    if not asesora: return jsonify([])
     return jsonify(handler.get_clients_for_agent(asesora))
 
-@app.route('/api/add-client', methods=['POST'])
-def add_client():
+@app.route('/api/auditors', methods=['GET'])
+def get_auditors_list():
     try:
-        data = request.json
-        success, message = handler.add_new_client(data, data.get('files_payload', []))
-        if success:
-            return jsonify({"status": "success", "message": message})
-        return jsonify({"status": "error", "message": message}), 500
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Error crítico: {str(e)}"}), 500
-
-@app.route('/api/update-client-advanced', methods=['POST'])
-def update_client():
-    try:
-        data = request.json
-        success, message = handler.update_client_advanced(data)
-        if success:
-            return jsonify({"status": "success", "message": message})
-        return jsonify({"status": "error", "message": message}), 500
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Error crítico en actualización: {str(e)}"}), 500
+        data = handler.get_auditors()
+        return jsonify([a['Nombre'] for a in data])
+    except: return jsonify([])
 
 if __name__ == '__main__':
-    # Mantenemos localhost para desarrollo, ajustable para Dockploy/Producción
     app.run(debug=True, port=5000)
