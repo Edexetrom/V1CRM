@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class DataHandler:
     """
-    Versión 6.0: Blindaje Total - SQLite Queue + Phone Validation + Single Thread Worker.
+    Versión 6.1: Blindaje Total + Función Delete + Naming Fix (nombre_paso_consecutivo)
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
@@ -66,7 +66,6 @@ class DataHandler:
     # --- LÓGICA DE COLA (SQLITE) ---
 
     def enqueue_client_data(self, action_type, data):
-        """Guarda la petición en SQLite para que el worker la procese."""
         try:
             sync_id = data.get('sync_id', f"MANUAL_{int(time.time())}")
             phone = data.get('Canal', '0000000000')
@@ -90,7 +89,6 @@ class DataHandler:
             return False, str(e)
 
     def process_queue_step(self):
-        """Toma el registro PENDING más antiguo y lo sube a Google."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT id, type, phone, payload, sync_id FROM sync_queue WHERE status = 'PENDING' ORDER BY id ASC LIMIT 1")
@@ -102,16 +100,13 @@ class DataHandler:
         q_id, q_type, q_phone, q_payload, q_sync_id = row
         data = json.loads(q_payload)
 
-        # 1. Validación por Teléfono (Si es un alta nueva)
         if q_type == "ADD" and self._check_phone_exists_local(q_phone):
             self._update_queue_status(q_id, "DUPLICATE", error="Teléfono ya registrado anteriormente.")
             return
 
-        # 2. Subida a Google (Sheets + Drive)
         success, message, drive_url = self._upload_to_google(q_type, data)
 
         if success:
-            # 3. Limpieza de Payload (Eliminar base64 para ahorrar espacio)
             if 'files_payload' in data:
                 data['files_payload'] = "[CLEANED_AFTER_SUCCESS]"
             
@@ -121,39 +116,42 @@ class DataHandler:
             self._update_queue_status(q_id, "ERROR", error=message)
             self._write_to_journal(q_type, data, f"RETRY_ERROR: {message}")
 
-    def _check_phone_exists_local(self, phone):
-        """Chequeo rápido en base local."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM sync_queue WHERE phone = ? AND status = 'SUCCESS'", (phone,))
-        exists = cursor.fetchone()
-        conn.close()
-        return exists is not None
-
-    def _update_queue_status(self, q_id, status, drive_url=None, error=None, clean_payload=None):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        now = datetime.now().isoformat()
-        if clean_payload:
-            cursor.execute("UPDATE sync_queue SET status=?, drive_url=?, error_message=?, synced_at=?, payload=? WHERE id=?", 
-                          (status, drive_url, error, now, clean_payload, q_id))
-        else:
-            cursor.execute("UPDATE sync_queue SET status=?, drive_url=?, error_message=?, synced_at=? WHERE id=?", 
-                          (status, drive_url, error, now, q_id))
-        conn.commit()
-        conn.close()
+    # --- NUEVA FUNCIÓN: BORRADO DE CLIENTE ---
+    def delete_client(self, nombre):
+        """Busca y elimina un cliente de la hoja de cálculo y registra el evento."""
+        try:
+            sheet = self.workbook.worksheet("Seguimientos")
+            cell = sheet.find(nombre)
+            if cell:
+                # Obtenemos datos para el Journal antes de borrar
+                row_data = sheet.row_values(cell.row)
+                sheet.delete_rows(cell.row)
+                
+                logger.info(f"Cliente {nombre} eliminado por auditoría.")
+                self._write_to_journal("DELETE", {"Nombre": nombre}, "SUCCESS")
+                return True, f"Cliente {nombre} eliminado correctamente"
+            
+            return False, "Cliente no encontrado en la base de datos"
+        except Exception as e:
+            logger.error(f"Error borrando cliente: {e}")
+            return False, str(e)
 
     def _upload_to_google(self, q_type, data):
-        """Lógica original de Google Sheets adaptada para el Worker."""
         try:
             sheet = self.workbook.worksheet("Seguimientos")
             folder_url = ""
 
-            # Procesar Imágenes primero
+            # --- CORRECCIÓN DE NAMING (nombre_paso_consecutivo) ---
             files = data.get('files_payload', [])
             if files:
+                # Extraemos el "paso" (nuevo, seguimiento, etc) o usamos 'gestion' por defecto
+                etapa = data.get('etapa', 'gestion').lower()
+                client_name_clean = (data.get('Nombre') or data.get('nombre_original', 'cliente')).replace(" ", "_")
+                
                 for i, file in enumerate(files):
-                    res = self._send_to_script(data.get('Nombre') or data.get('nombre_original'), file, f"Sync_{i}")
+                    # Formato solicitado: nombre_paso_consecutivo
+                    custom_filename = f"{client_name_clean}_{etapa}_{i}"
+                    res = self._send_to_script(data.get('Nombre') or data.get('nombre_original'), file, custom_filename)
                     if res and res.get('status') == 'success' and not folder_url:
                         folder_url = res.get('folderUrl', '')
 
@@ -199,7 +197,28 @@ class DataHandler:
         except Exception as e:
             return False, str(e), None
 
-    # --- MÉTODOS DE APOYO (REUTILIZADOS) ---
+    # --- MÉTODOS DE APOYO ---
+
+    def _check_phone_exists_local(self, phone):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM sync_queue WHERE phone = ? AND status = 'SUCCESS'", (phone,))
+        exists = cursor.fetchone()
+        conn.close()
+        return exists is not None
+
+    def _update_queue_status(self, q_id, status, drive_url=None, error=None, clean_payload=None):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        if clean_payload:
+            cursor.execute("UPDATE sync_queue SET status=?, drive_url=?, error_message=?, synced_at=?, payload=? WHERE id=?", 
+                          (status, drive_url, error, now, clean_payload, q_id))
+        else:
+            cursor.execute("UPDATE sync_queue SET status=?, drive_url=?, error_message=?, synced_at=? WHERE id=?", 
+                          (status, drive_url, error, now, q_id))
+        conn.commit()
+        conn.close()
 
     def _write_to_journal(self, action, data, status):
         try:
@@ -233,16 +252,17 @@ class DataHandler:
         if added: sheet.update('A1', [updated])
         return updated
 
-    def _send_to_script(self, client_name, file_payload, suffix):
+    def _send_to_script(self, client_name, file_payload, custom_filename):
         try:
             payload = { 
                 "parentFolderId": self.PARENT_FOLDER_ID, 
                 "clientName": client_name, 
-                "filename": f"{suffix}.png", 
+                "filename": f"{custom_filename}.png", 
                 "contentType": file_payload.get('contentType', 'image/png'), 
                 "base64Data": file_payload.get('base64Data') 
             }
-            return requests.post(self.SCRIPT_URL, json=payload, timeout=30).json()
+            # Timeout aumentado para evitar reintentos automáticos del navegador
+            return requests.post(self.SCRIPT_URL, json=payload, timeout=60).json()
         except: return None
 
     def get_active_agents(self):
