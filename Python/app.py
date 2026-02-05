@@ -12,104 +12,134 @@ os.environ['TZ'] = 'America/Mexico_City'
 if hasattr(time, 'tzset'):
     time.tzset()
 
-# Configuración de Logging profesional
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Blindaje de capacidad: 30MB para ráfagas de imágenes en alta resolución
 app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024 
 CORS(app)
 
-# Inicialización del manejador de datos (SQLite + Sheets)
 handler = DataHandler()
 
-# --- HILO TRABAJADOR (WORKER) PARA COLA SQLITE ---
+# --- HILO TRABAJADOR (WORKER) PARA RESPALDO EN LA NUBE ---
 def start_worker():
     def run():
-        logger.info("Hilo Trabajador (Worker) LOCALhost iniciado - Procesando Handshake.")
+        logger.info("Hilo Trabajador (Worker) v10.3 activo - Sincronización en segundo plano iniciada.")
         while True:
             try:
-                # Procesa un paso de la cola (Handshake individual)
                 handler.process_queue_step()
             except Exception as e:
-                logger.error(f"Error en worker local: {e}")
-            # Ciclo de 5 segundos para optimizar cuota de API de Google
+                logger.error(f"Error en worker de sincronización: {e}")
             time.sleep(5)
     
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
 
-# Iniciamos el worker al arrancar el servidor
 start_worker()
 
-# --- ENDPOINTS DE AGENTES Y LOGIN ---
+# --- ENDPOINTS DE ACCESO Y SEGURIDAD ---
 
 @app.route('/api/agents', methods=['GET'])
 def get_agents():
-    """Obtiene la lista de nombres de asesoras activas."""
+    """Obtiene la lista de nombres de asesoras para los dropdowns."""
     try:
-        agents_data = handler.get_active_agents()
-        return jsonify([a['nombre'] for a in agents_data])
+        return jsonify(handler.get_agents_list())
     except Exception as e:
         logger.error(f"Error en get_agents: {e}")
         return jsonify([]), 500
 
+@app.route('/api/auditors', methods=['GET'])
+def get_auditors_list_api():
+    """SOLUCIÓN AL 404: Obtiene la lista de nombres de auditores para el login."""
+    try:
+        return jsonify(handler.get_auditors_list())
+    except Exception as e:
+        logger.error(f"Error en get_auditors_list_api: {e}")
+        return jsonify([]), 500
+
 @app.route('/api/login', methods=['POST'])
 def login():
-    """Autenticación para Asesoras con Auto-Registro de Clave Inicial."""
+    """Validación de credenciales de asesoras con Auto-Registro."""
     try:
         data = request.json
         name = data.get('nombre')
         password = str(data.get('password')).strip()
         
         if not name or not password:
-            return jsonify({"status": "error", "message": "Datos incompletos"}), 400
+            return jsonify({"status": "error", "message": "Credenciales incompletas"}), 400
 
-        agents = handler.get_active_agents()
-        agent = next((a for a in agents if a['nombre'] == name), None)
+        ws = handler.workbook.worksheet("AsesorasActivas")
+        agents = ws.get_all_records()
+        agent = next((a for a in agents if (a.get('nombre') or a.get('Nombre')) == name), None)
         
         if agent:
-            sheet_pass = str(agent.get('password', '')).strip()
+            sheet_pass = str(agent.get('password') or agent.get('Contraseña') or '').strip()
             
-            # --- LÓGICA DE AUTO-REGISTRO ---
-            # Si en Sheets está vacío o es "None", la clave ingresada es la nueva clave fija.
-            if not sheet_pass or sheet_pass == "" or sheet_pass == "None":
-                logger.info(f"Registrando clave inicial para {name}")
-                success = handler.set_agent_password(name, password)
-                if success:
-                    return jsonify({"status": "success", "nombre": name, "message": "Clave registrada correctamente"})
+            # CASO 1: No hay contraseña -> Se registra la nueva
+            if not sheet_pass or sheet_pass.lower() == "none" or sheet_pass == "":
+                logger.info(f"Registrando primera contraseña para Asesora: {name}")
+                if handler.set_agent_password(name, password):
+                    return jsonify({"status": "success", "nombre": name, "message": "Clave vinculada exitosamente."})
                 else:
-                    return jsonify({"status": "error", "message": "No se pudo registrar la clave en la nube"}), 500
+                    return jsonify({"status": "error", "message": "Error al vincular clave en la nube."}), 500
             
-            # --- VALIDACIÓN NORMAL ---
+            # CASO 2: Hay contraseña -> Se valida
             if sheet_pass == password:
                 return jsonify({"status": "success", "nombre": name})
                 
-        return jsonify({"status": "error", "message": "Credenciales inválidas"}), 401
+        return jsonify({"status": "error", "message": "Clave incorrecta o usuario no hallado."}), 401
     except Exception as e:
         logger.error(f"Error en login: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# --- FUNCIÓN: GENERACIÓN DE CONTRASEÑAS (BACKUP AUDITOR) ---
-
-@app.route('/api/generate-passwords', methods=['POST'])
-def generate_passwords():
-    """Genera contraseñas masivas para asesoras que no tengan una en Sheets."""
+@app.route('/api/login-audit', methods=['POST'])
+def login_audit():
+    """Acceso al Panel de Auditoría con Auto-Registro."""
     try:
-        success, count = handler.generate_missing_passwords()
-        if success:
-            return jsonify({"status": "success", "message": f"Se generaron {count} contraseñas nuevas."})
-        return jsonify({"status": "error", "message": "Error al procesar Sheets."})
+        data = request.json
+        name = data.get('nombre')
+        password = str(data.get('password')).strip()
+        
+        ws = handler.workbook.worksheet("Auditores")
+        auditors = ws.get_all_records()
+        auditor = next((a for a in auditors if (a.get('Nombre') or a.get('nombre')) == name), None)
+        
+        if not auditor: 
+            return jsonify({"status": "error", "message": "Auditor no hallado en la lista."}), 404
+        
+        correct_pass = str(auditor.get('Contraseña') or auditor.get('password') or '').strip()
+        permisos = auditor.get('Permisos') or auditor.get('permisos') or 'Visualizador'
+
+        # CASO 1: No hay contraseña en la celda -> Auto-registro
+        if not correct_pass or correct_pass.lower() == "none" or correct_pass == "":
+            logger.info(f"Registrando primera contraseña para Auditor: {name}")
+            if handler.set_auditor_password(name, password):
+                return jsonify({"status": "success", "nombre": name, "permisos": permisos, "message": "Clave maestra establecida."})
+            else:
+                return jsonify({"status": "error", "message": "Error al establecer clave de auditor."}), 500
+
+        # CASO 2: Validación estándar
+        if correct_pass == password:
+            return jsonify({
+                "status": "success", 
+                "nombre": name, 
+                "permisos": permisos
+            })
+        return jsonify({"status": "error", "message": "Clave maestra incorrecta."}), 401
     except Exception as e:
-        logger.error(f"Error en generate-passwords: {e}")
+        logger.error(f"Error en login-audit: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# --- ENDPOINTS DE CLIENTES Y GESTIÓN ---
+# --- ENDPOINTS DE OPERACIÓN (EXPEDIENTES) ---
 
 @app.route('/api/clients', methods=['GET'])
 def get_clients():
     asesora = request.args.get('asesora')
+    if not asesora:
+        return jsonify([]), 400
     return jsonify(handler.get_clients_for_agent(asesora))
 
 @app.route('/api/add-client', methods=['POST'])
@@ -119,7 +149,7 @@ def add_client():
         success, message = handler.enqueue_client_data("ADD", data)
         return jsonify({"status": "success" if success else "error", "message": message})
     except Exception as e:
-        logger.error(f"Error en add-client: {e}")
+        logger.error(f"Error registrando cliente: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/update-client-advanced', methods=['POST'])
@@ -129,103 +159,92 @@ def update_client():
         success, message = handler.enqueue_client_data("UPDATE", data)
         return jsonify({"status": "success" if success else "error", "message": message})
     except Exception as e:
-        logger.error(f"Error en update-client: {e}")
+        logger.error(f"Error actualizando gestión: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# --- ENDPOINTS DE AUDITORÍA Y CONTROL ---
+@app.route('/api/rename-client', methods=['POST', 'OPTIONS'])
+def rename_client():
+    """Nuevo endpoint para renombrado por parte de usuarios Superior."""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+    try:
+        data = request.json
+        old_name = data.get('old_name')
+        new_name = data.get('new_name')
+        canal = data.get('canal')
+        
+        if not old_name or not new_name or not canal:
+            return jsonify({"status": "error", "message": "Datos de renombrado incompletos."}), 400
+            
+        success, message = handler.rename_client_db(old_name, new_name, canal)
+        return jsonify({"status": "success" if success else "error", "message": message})
+    except Exception as e:
+        logger.error(f"Error en rename_client: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/login-audit', methods=['POST'])
-def login_audit():
+@app.route('/api/delete-client', methods=['POST', 'OPTIONS'])
+def delete_client():
+    """Nuevo endpoint para borrado espejo (SQLite + Sheets + Drive)."""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
     try:
         data = request.json
         name = data.get('nombre')
-        password = str(data.get('password')).strip()
-        auditors = handler.get_auditors()
-        auditor = next((a for a in auditors if a['Nombre'] == name), None)
-        if not auditor: return jsonify({"status": "error", "message": "Auditor no encontrado"}), 404
-        if str(auditor.get('Contraseña', '')).strip() == password:
-            return jsonify({
-                "status": "success", 
-                "nombre": name, 
-                "permisos": auditor['Permisos']
-            })
-        return jsonify({"status": "error", "message": "Clave incorrecta"}), 401
+        canal = data.get('canal')
+        imagenes_url = data.get('imagenes_url')
+        
+        if not name or not canal:
+            return jsonify({"status": "error", "message": "Identificadores de cliente incompletos."}), 400
+            
+        success, message = handler.delete_client_db(name, canal, imagenes_url)
+        return jsonify({"status": "success" if success else "error", "message": message})
     except Exception as e:
+        logger.error(f"Error en delete_client: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/auditors', methods=['GET'])
-def get_auditors_list():
-    try:
-        data = handler.get_auditors()
-        return jsonify([a['Nombre'] for a in data])
-    except:
-        return jsonify([])
+# --- ENDPOINTS DE AUDITORÍA Y MONITOREO ---
 
 @app.route('/api/all-clients', methods=['GET'])
 def get_all_clients():
     return jsonify(handler.get_all_clients())
-
-@app.route('/api/delete-client', methods=['POST'])
-def delete_client():
-    try:
-        data = request.json
-        nombre = data.get('nombre')
-        if not nombre: return jsonify({"status": "error", "message": "Falta nombre"}), 400
-        success, message = handler.delete_client(nombre)
-        return jsonify({"status": "success" if success else "error", "message": message})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-# --- ENDPOINTS DE MONITOREO Y RESPALDO ---
 
 @app.route('/api/sync-queue', methods=['GET'])
 def get_sync_queue():
     try:
         conn = handler._get_conn() 
         cursor = conn.cursor()
-        cursor.execute("SELECT sync_id, payload, status, created_at FROM sync_queue WHERE status != 'SUCCESS' ORDER BY id DESC")
+        cursor.execute("SELECT sync_id, payload, status, created_at, type FROM sync_queue WHERE status != 'SUCCESS' ORDER BY id DESC")
         rows = cursor.fetchall()
         queue = []
         for r in rows:
-            data = json.loads(r[1])
+            p = json.loads(r[1])
             queue.append({
                 "sync_id": r[0],
-                "asesora": data.get('Asesora', 'N/A'),
-                "action": data.get('etapa', 'Registro'),
+                "asesora": p.get('Asesora') or p.get('asesora') or 'N/A',
+                "action": f"{r[4]} - {p.get('etapa', 'Gestión')}",
                 "timestamp": r[3]
             })
         conn.close()
         return jsonify(queue)
-    except:
-        return jsonify([])
+    except: return jsonify([])
 
 @app.route('/api/journal-tail', methods=['GET'])
 def get_journal_tail():
     try:
         path = handler.journal_path
-        if not os.path.exists(path): return jsonify([])
+        if not os.path.exists(path): return jsonify(["Journal no inicializado."])
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
             return jsonify([line.strip() for line in lines[-50:]])
     except Exception as e:
-        return jsonify([f"ERROR: {str(e)}"])
-
-@app.route('/api/system-logs', methods=['GET'])
-def get_system_logs():
-    try: return jsonify(handler.get_latest_system_logs(limit=50))
-    except: return jsonify([]), 500
-
-@app.route('/api/download-journal', methods=['GET'])
-def download_journal():
-    path = handler.journal_path
-    if os.path.exists(path): return send_file(path, as_attachment=True)
-    return jsonify({"status": "error", "message": "No hallado"}), 404
+        return jsonify([f"ERROR_LOG: {str(e)}"])
 
 @app.route('/api/download-db', methods=['GET'])
 def download_db():
-    path = handler.db_path
-    if os.path.exists(path): return send_file(path, as_attachment=True)
-    return jsonify({"status": "error", "message": "No hallado"}), 404
+    if os.path.exists(handler.db_path): 
+        return send_file(handler.db_path, as_attachment=True)
+    return "Base de datos no encontrada.", 404
 
 if __name__ == '__main__':
+    logger.info("Iniciando Servidor Flask CRM Handshake v10.3...")
     app.run(host='0.0.0.0', debug=True, port=5000)
