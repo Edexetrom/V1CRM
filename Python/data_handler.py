@@ -17,9 +17,9 @@ logger = logging.getLogger("DataHandler")
 
 class DataHandler:
     """
-    Versión 10.9: Soporte para Renombrado, Borrado Espejo y Escritura de Credenciales.
-    - set_agent_password: Fija la contraseña en la pestaña AsesorasActivas.
-    - set_auditor_password: Fija la contraseña en la pestaña Auditores.
+    Versión 10.10: Fix Mapeo Completo ADD + Cálculo Rendimiento.
+    - enqueue_client_data: Calcula rendimiento y guarda todos los campos base en SQLite.
+    - _upload_to_google: Mapeo extendido para asegurar que todos los campos lleguen a Sheets en el registro inicial.
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
@@ -154,16 +154,12 @@ class DataHandler:
         except Exception as e:
             logger.error(f"Error migración: {e}")
 
-    # --- MÉTODOS DE LOGIN Y REGISTRO (AUTH) ---
-
     def set_agent_password(self, name, password):
-        """Escribe la contraseña de una asesora en Google Sheets."""
         try:
             ws = self.workbook.worksheet("AsesorasActivas")
             cell = ws.find(name)
             if not cell: return False
             headers = ws.row_values(1)
-            # Buscamos columna 'Contraseña' o 'password'
             col_idx = next((i+1 for i, h in enumerate(headers) if self._normalize(h) in ['password', 'contrasena']), None)
             if col_idx:
                 ws.update_cell(cell.row, col_idx, str(password))
@@ -174,7 +170,6 @@ class DataHandler:
             return False
 
     def set_auditor_password(self, name, password):
-        """Escribe la contraseña de un auditor en Google Sheets."""
         try:
             ws = self.workbook.worksheet("Auditores")
             cell = ws.find(name)
@@ -206,8 +201,6 @@ class DataHandler:
         except Exception as e:
             logger.error(f"Error obteniendo lista de asesoras: {e}")
             return []
-
-    # --- MÉTODOS DE OPERACIÓN ---
 
     def rename_client_db(self, old_name, new_name, canal):
         try:
@@ -254,22 +247,36 @@ class DataHandler:
         canal = "".join(filter(str.isdigit, canal_raw))[-10:]
         id_unico = f"ID_{canal}" if canal else None
         nombre_ref = data.get('nombre_original') or data.get('Nombre')
+        
+        # Lógica de Rendimiento
+        rendimiento = "AL DIA"
+        prox = data.get('Fecha Próx. Contacto')
+        if prox and '/' in prox:
+            try:
+                d, m, y = map(int, prox.split('/'))
+                if datetime(y, m, d).date() < datetime.now().date():
+                    rendimiento = "VENCIDO"
+            except: pass
+        data['Rendimiento'] = rendimiento
+
         try:
             self._write_to_journal(action_type, data, "RECEIVED")
             conn = self._get_conn()
             cursor = conn.cursor()
             if action_type == "ADD":
                 cursor.execute('''
-                    INSERT OR REPLACE INTO prospectos (id_unico, validacion, nombre, canal, fecha_registro, nivel_interes, resumen, fecha_proxima, estado_final, asesora)
-                    VALUES (?, 'PENDIENTE', ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (id_unico, data.get('Nombre'), canal, data.get('Fecha 1er Contacto'), data.get('Nivel de Interés'), data.get('Resumen Conversación'), data.get('Fecha Próx. Contacto'), data.get('Estado Final', 'Seguimiento'), data.get('Asesora')))
+                    INSERT OR REPLACE INTO prospectos (id_unico, validacion, nombre, canal, fecha_registro, nivel_interes, resumen, rendimiento, fecha_proxima, estado_final, comentarios, asesora)
+                    VALUES (?, 'PENDIENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (id_unico, data.get('Nombre'), canal, data.get('Fecha 1er Contacto'), data.get('Nivel de Interés'), data.get('Resumen Conversación'), rendimiento, data.get('Fecha Próx. Contacto'), data.get('Estado Final', 'Seguimiento'), data.get('Comentarios', ''), data.get('Asesora')))
+            
             elif action_type == "UPDATE":
                 query_find = "SELECT fecha_proxima FROM prospectos WHERE id_unico = ? OR nombre = ?"
                 existing = cursor.execute(query_find, (id_unico, nombre_ref)).fetchone()
                 cita_anterior = existing[0] if existing else "--"
                 updates = data.get('updates', {})
-                sql_parts = ["validacion = 'PENDIENTE'", "updated_at = CURRENT_TIMESTAMP"]
-                params = []
+                sql_parts = ["validacion = 'PENDIENTE'", "updated_at = CURRENT_TIMESTAMP", "rendimiento = ?"]
+                params = [rendimiento]
+                
                 mapping_db = {'Estado Final': 'estado_final', 'Nivel de Interés': 'nivel_interes', 'Fecha Próx. Contacto': 'fecha_proxima', 'Comentarios': 'comentarios', 'nombre': 'nombre'}
                 for ui_key, db_col in mapping_db.items():
                     if ui_key in updates:
@@ -285,9 +292,11 @@ class DataHandler:
                         sql_parts.append(f"notas_seguimiento_{i} = ?")
                         params.append(final_note)
                         data['updates'][n_ui] = final_note
+
                 query_where = "WHERE id_unico = ?" if id_unico and len(id_unico) > 3 else "WHERE nombre = ?"
                 params.append(id_unico if id_unico and len(id_unico) > 3 else nombre_ref)
                 cursor.execute(f"UPDATE prospectos SET {', '.join(sql_parts)} {query_where}", params)
+
             try:
                 cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', (sync_id, action_type, id_unico or nombre_ref, json.dumps(data)))
             except sqlite3.IntegrityError: pass 
@@ -314,7 +323,8 @@ class DataHandler:
         if success:
             cursor.execute("UPDATE sync_queue SET status = 'SUCCESS' WHERE id = ?", (q_id,))
             if q_type != "DELETE":
-                cursor.execute("UPDATE prospectos SET imagenes_url = ?, validacion = 'OK' WHERE id_unico = ? OR nombre = ?", (folder_url or "", q_phone_id, data.get('nombre_original') or data.get('Nombre')))
+                final_folder = folder_url or data.get('imagenes_url') or ""
+                cursor.execute("UPDATE prospectos SET imagenes_url = ?, validacion = 'OK' WHERE id_unico = ? OR nombre = ?", (final_folder, q_phone_id, data.get('nombre_original') or data.get('Nombre')))
             self._write_to_journal(q_type, data, "SUCCESS")
         else:
             cursor.execute("UPDATE sync_queue SET status = 'PENDING' WHERE id = ?", (q_id,))
@@ -358,8 +368,22 @@ class DataHandler:
                     if img_resp and img_resp.get('status') == 'success':
                         folder_url = img_resp.get('folderUrl')
 
+            # MAPEO DE FILA PARA ADD (REPARADO)
             if q_type == "ADD":
-                row_map = {self.FIELD_MAP['nombre']: data.get('Nombre'), self.FIELD_MAP['canal']: data.get('Canal'), self.FIELD_MAP['id_unico']: sync_id, self.FIELD_MAP['imagenes_url']: folder_url or ""}
+                row_map = {
+                    self.FIELD_MAP['nombre']: data.get('Nombre'),
+                    self.FIELD_MAP['canal']: data.get('Canal'),
+                    self.FIELD_MAP['fecha_registro']: data.get('Fecha 1er Contacto'),
+                    self.FIELD_MAP['nivel_interes']: data.get('Nivel de Interés'),
+                    self.FIELD_MAP['resumen']: data.get('Resumen Conversación'),
+                    self.FIELD_MAP['rendimiento']: data.get('Rendimiento'),
+                    self.FIELD_MAP['fecha_proxima']: data.get('Fecha Próx. Contacto'),
+                    self.FIELD_MAP['estado_final']: data.get('Estado Final', 'Seguimiento'),
+                    self.FIELD_MAP['comentarios']: data.get('Comentarios', ''),
+                    self.FIELD_MAP['asesora']: data.get('Asesora'),
+                    self.FIELD_MAP['imagenes_url']: folder_url or "",
+                    self.FIELD_MAP['id_unico']: sync_id
+                }
                 headers = self._ensure_columns(ws, headers, row_map.keys())
                 ws.append_row([str(row_map.get(h, "")) for h in headers])
                 return True, "Ok", folder_url
@@ -369,7 +393,10 @@ class DataHandler:
                 updates = data.get('updates', {})
                 sheet_updates = { self.FIELD_MAP.get(k, k): v for k, v in updates.items() }
                 sheet_updates[self.FIELD_MAP['id_unico']] = sync_id
+                if 'Rendimiento' in data: sheet_updates[self.FIELD_MAP['rendimiento']] = data['Rendimiento']
                 if folder_url: sheet_updates[self.FIELD_MAP['imagenes_url']] = folder_url
+                
+                headers = self._ensure_columns(ws, headers, sheet_updates.keys())
                 batch = []
                 for k, v in sheet_updates.items():
                     col_i = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(k)), None)
