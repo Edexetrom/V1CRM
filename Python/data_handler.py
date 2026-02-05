@@ -7,30 +7,49 @@ import unicodedata
 import logging
 import sqlite3
 import time
-import random
-import string
-import re
 from datetime import datetime
+from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 
 load_dotenv()
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("DataHandler")
 
 class DataHandler:
     """
-    Versión 8.2: Eliminación de Duplicados (Locking) + Borrado Espejo en SQLite.
-    Garantiza que no se suban registros duplicados y limpia la base de datos local al borrar.
+    Versión 10.9: Soporte para Renombrado, Borrado Espejo y Escritura de Credenciales.
+    - set_agent_password: Fija la contraseña en la pestaña AsesorasActivas.
+    - set_auditor_password: Fija la contraseña en la pestaña Auditores.
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
     SHEET_URL = "https://docs.google.com/spreadsheets/d/1PGyE1TN5q1tEtoH5A-wxqS27DkONkNzp-hreL3OMJZw/edit#gid=0"
 
+    FIELD_MAP = {
+        'nombre': 'Nombre',
+        'canal': 'Canal (Tel/WhatsApp)',
+        'fecha_registro': 'Fecha 1er Contacto',
+        'nivel_interes': 'Nivel de Interés',
+        'resumen': 'Resumen Conversación',
+        'rendimiento': 'Rendimiento',
+        'fecha_proxima': 'Fecha Próx. Contacto',
+        'estado_final': 'Estado Final',
+        'comentarios': 'Comentarios',
+        'asesora': 'Asesora',
+        'imagenes_url': 'Imagenes',
+        'id_unico': 'ID Sincronización'
+    }
+
     def __init__(self):
         self.app_id = os.getenv("APP_ID", "crm-asesoras")
         self.db_path = f"/artifacts/{self.app_id}/prospectos.db" if os.path.exists(f"/artifacts/{self.app_id}") else "prospectos.db"
-        self.journal_path = f"/artifacts/{self.app_id}/public/data/journal.jsonl" if os.path.exists(f"/artifacts/{self.app_id}") else "journal.jsonl"
+        self.journal_path = f"/artifacts/{self.app_id}/journal.jsonl" if os.path.exists(f"/artifacts/{self.app_id}") else "journal.jsonl"
+        
         self._init_db()
         self.connect_sheets()
+        
+        if self._is_db_empty() and hasattr(self, 'workbook'):
+            self.run_initial_migration()
 
     def _get_conn(self):
         return sqlite3.connect(self.db_path)
@@ -38,28 +57,40 @@ class DataHandler:
     def _init_db(self):
         conn = self._get_conn()
         cursor = conn.cursor()
+        
+        seguimientos_cols = ""
+        for i in range(1, 31):
+            seguimientos_cols += f"fecha_seguimiento_{i} TEXT, notas_seguimiento_{i} TEXT, "
+
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS prospectos (
+                id_unico TEXT PRIMARY KEY,
+                validacion TEXT DEFAULT 'OK',
+                nombre TEXT,
+                canal TEXT,
+                fecha_registro TEXT,
+                nivel_interes TEXT,
+                resumen TEXT,
+                rendimiento TEXT,
+                fecha_proxima TEXT,
+                estado_final TEXT,
+                comentarios TEXT,
+                asesora TEXT,
+                imagenes_url TEXT,
+                {seguimientos_cols}
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sync_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sync_id TEXT UNIQUE,
                 type TEXT,
-                phone TEXT,
+                phone_id TEXT,
                 payload TEXT,
                 status TEXT DEFAULT 'PENDING',
-                drive_url TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                synced_at TIMESTAMP,
-                error_message TEXT
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS system_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sync_id TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                level TEXT,
-                message TEXT,
-                agent TEXT
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         conn.commit()
@@ -70,243 +101,302 @@ class DataHandler:
             creds_b64 = os.getenv("GOOGLE_CREDS_BASE64")
             if creds_b64:
                 info = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
-                self.client = gspread.service_account_from_dict(info)
+                creds = Credentials.from_service_account_info(
+                    info, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                )
+                self.client = gspread.authorize(creds)
                 self.workbook = self.client.open_by_url(self.SHEET_URL)
-                logger.info("Conexión Sheets OK - Modo Localhost")
+                logger.info("Conexión Sheets OK")
         except Exception as e:
             logger.error(f"Error conexión Sheets: {e}")
 
-    def set_agent_password(self, agent_name, new_password):
-        try:
-            ws = self.workbook.worksheet("AsesorasActivas")
-            cell = ws.find(agent_name)
-            if not cell: return False
-            headers = ws.row_values(1)
-            try:
-                pass_col_idx = next(i+1 for i, h in enumerate(headers) if self._normalize(h) == 'password')
-            except StopIteration:
-                pass_col_idx = len(headers) + 1
-                ws.update_cell(1, pass_col_idx, "password")
-            ws.update_cell(cell.row, pass_col_idx, str(new_password).strip())
-            return True
-        except Exception as e:
-            logger.error(f"Error registrando clave inicial: {e}")
-            return False
+    def _is_db_empty(self):
+        conn = self._get_conn()
+        res = conn.execute("SELECT count(*) FROM prospectos").fetchone()[0]
+        conn.close()
+        return res == 0
 
-    def generate_missing_passwords(self):
+    def run_initial_migration(self):
+        logger.info("Migrando herencia desde Google Sheets a Master Local...")
         try:
-            ws = self.workbook.worksheet("AsesorasActivas")
+            ws = self.workbook.worksheet("Seguimientos")
             records = ws.get_all_records()
-            headers = ws.row_values(1)
-            try:
-                pass_col_idx = next(i+1 for i, h in enumerate(headers) if self._normalize(h) == 'password')
-            except StopIteration:
-                ws.update_cell(1, len(headers) + 1, "password")
-                pass_col_idx = len(headers) + 1
-            updated_count = 0
-            for i, row in enumerate(records):
-                current_pass = str(row.get('password', '')).strip()
-                if not current_pass or current_pass == "" or current_pass == "None":
-                    new_pass = ''.join(random.choices(string.digits, k=4))
-                    ws.update_cell(i + 2, pass_col_idx, new_pass)
-                    updated_count += 1
-            return True, updated_count
-        except Exception as e:
-            logger.error(f"Error generando contraseñas: {e}")
-            return False, 0
-
-    def _log_event(self, sync_id, level, message, agent="SYSTEM"):
-        try:
             conn = self._get_conn()
             cursor = conn.cursor()
-            now = datetime.now().isoformat()
-            cursor.execute('''INSERT INTO system_logs (sync_id, timestamp, level, message, agent) VALUES (?, ?, ?, ?, ?)''', (sync_id, now, level, message, agent))
+
+            for r in records:
+                canal_raw = str(r.get(self.FIELD_MAP['canal']) or r.get('Canal') or '')
+                canal = "".join(filter(str.isdigit, canal_raw))[-10:]
+                if not canal: continue
+                id_unico = f"ID_{canal}"
+                
+                base_data = [
+                    id_unico, 'OK', r.get(self.FIELD_MAP['nombre']), canal, 
+                    r.get(self.FIELD_MAP['fecha_registro']), r.get(self.FIELD_MAP['nivel_interes']), 
+                    r.get(self.FIELD_MAP['resumen']), r.get(self.FIELD_MAP['rendimiento']),
+                    r.get(self.FIELD_MAP['fecha_proxima']), r.get(self.FIELD_MAP['estado_final']),
+                    r.get(self.FIELD_MAP['comentarios']), r.get(self.FIELD_MAP['asesora']), 
+                    r.get(self.FIELD_MAP['imagenes_url'])
+                ]
+                
+                seguimientos_data = []
+                for i in range(1, 31):
+                    seguimientos_data.append(r.get(f'Fecha Seguimiento {i}', ''))
+                    seguimientos_data.append(r.get(f'Notas Seguimiento {i}', ''))
+
+                total_params = base_data + seguimientos_data
+                placeholders = ",".join(["?"] * len(total_params))
+                cursor.execute(f"INSERT OR REPLACE INTO prospectos VALUES ({placeholders}, CURRENT_TIMESTAMP)", total_params)
+
             conn.commit()
             conn.close()
-        except: pass
+            logger.info("Migración exitosa.")
+        except Exception as e:
+            logger.error(f"Error migración: {e}")
 
-    def get_latest_system_logs(self, limit=50):
+    # --- MÉTODOS DE LOGIN Y REGISTRO (AUTH) ---
+
+    def set_agent_password(self, name, password):
+        """Escribe la contraseña de una asesora en Google Sheets."""
         try:
+            ws = self.workbook.worksheet("AsesorasActivas")
+            cell = ws.find(name)
+            if not cell: return False
+            headers = ws.row_values(1)
+            # Buscamos columna 'Contraseña' o 'password'
+            col_idx = next((i+1 for i, h in enumerate(headers) if self._normalize(h) in ['password', 'contrasena']), None)
+            if col_idx:
+                ws.update_cell(cell.row, col_idx, str(password))
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error set_agent_password: {e}")
+            return False
+
+    def set_auditor_password(self, name, password):
+        """Escribe la contraseña de un auditor en Google Sheets."""
+        try:
+            ws = self.workbook.worksheet("Auditores")
+            cell = ws.find(name)
+            if not cell: return False
+            headers = ws.row_values(1)
+            col_idx = next((i+1 for i, h in enumerate(headers) if self._normalize(h) in ['password', 'contrasena']), None)
+            if col_idx:
+                ws.update_cell(cell.row, col_idx, str(password))
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error set_auditor_password: {e}")
+            return False
+
+    def get_auditors_list(self):
+        try:
+            ws = self.workbook.worksheet("Auditores")
+            values = ws.col_values(1)
+            return [v for v in values if v and v.lower() not in ['nombre', 'auditor', 'auditores']]
+        except Exception as e:
+            logger.error(f"Error obteniendo lista de auditores: {e}")
+            return []
+
+    def get_agents_list(self):
+        try:
+            ws = self.workbook.worksheet("AsesorasActivas")
+            values = ws.col_values(1)
+            return [v for v in values if v and v.lower() not in ['nombre', 'asesora', 'asesoras']]
+        except Exception as e:
+            logger.error(f"Error obteniendo lista de asesoras: {e}")
+            return []
+
+    # --- MÉTODOS DE OPERACIÓN ---
+
+    def rename_client_db(self, old_name, new_name, canal):
+        try:
+            clean_canal = "".join(filter(str.isdigit, str(canal)))[-10:]
+            id_unico = f"ID_{clean_canal}"
+            sync_id = f"REN_{int(time.time())}_{clean_canal}"
             conn = self._get_conn()
             cursor = conn.cursor()
-            cursor.execute("SELECT timestamp, level, message, sync_id, agent FROM system_logs ORDER BY id DESC LIMIT ?", (limit,))
-            logs = [{"t": r[0], "lv": r[1], "msg": r[2], "sid": r[3], "ag": r[4]} for r in cursor.fetchall()]
+            cursor.execute("UPDATE prospectos SET nombre = ?, validacion = 'PENDIENTE', updated_at = CURRENT_TIMESTAMP WHERE id_unico = ?", (new_name, id_unico))
+            payload = {"old_name": old_name, "new_name": new_name, "canal": canal, "sync_id": sync_id}
+            cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', 
+                           (sync_id, "RENAME", id_unico, json.dumps(payload)))
+            conn.commit()
             conn.close()
-            return logs
-        except: return []
+            self._write_to_journal("RENAME", {"sync_id": sync_id, "Nombre": f"{old_name} -> {new_name}"}, "RECEIVED")
+            return True, "Nombre actualizado y sincronización encolada."
+        except Exception as e:
+            logger.error(f"Error en renombrado DB: {e}")
+            return False, str(e)
+
+    def delete_client_db(self, name, canal, imagenes_url):
+        try:
+            clean_canal = "".join(filter(str.isdigit, str(canal)))[-10:]
+            id_unico = f"ID_{clean_canal}"
+            sync_id = f"DEL_{int(time.time())}_{clean_canal}"
+            conn = self._get_conn()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM prospectos WHERE id_unico = ?", (id_unico,))
+            payload = {"nombre": name, "canal": canal, "imagenes_url": imagenes_url, "sync_id": sync_id}
+            cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', 
+                           (sync_id, "DELETE", id_unico, json.dumps(payload)))
+            conn.commit()
+            conn.close()
+            self._write_to_journal("DELETE", {"sync_id": sync_id, "Nombre": name}, "RECEIVED")
+            return True, "Expediente eliminado localmente. Sincronización con Nube en curso."
+        except Exception as e:
+            logger.error(f"Error en borrado DB: {e}")
+            return False, str(e)
 
     def enqueue_client_data(self, action_type, data):
+        sync_id = data.get('sync_id') or f"AUTO_{int(time.time())}"
+        data['sync_id'] = sync_id
+        canal_raw = str(data.get('Canal') or data.get('canal_original') or '')
+        canal = "".join(filter(str.isdigit, canal_raw))[-10:]
+        id_unico = f"ID_{canal}" if canal else None
+        nombre_ref = data.get('nombre_original') or data.get('Nombre')
         try:
-            sync_id = data.get('sync_id') or f"AUTO_{int(time.time())}"
-            data['sync_id'] = sync_id
-            agent = data.get('Asesora', 'SYSTEM')
-            self._log_event(sync_id, "INFO", f"Recibiendo {action_type}", agent)
-            if self._is_already_success(sync_id): return True, "Ya procesado anteriormente (ID duplicado)"
             self._write_to_journal(action_type, data, "RECEIVED")
             conn = self._get_conn()
             cursor = conn.cursor()
+            if action_type == "ADD":
+                cursor.execute('''
+                    INSERT OR REPLACE INTO prospectos (id_unico, validacion, nombre, canal, fecha_registro, nivel_interes, resumen, fecha_proxima, estado_final, asesora)
+                    VALUES (?, 'PENDIENTE', ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (id_unico, data.get('Nombre'), canal, data.get('Fecha 1er Contacto'), data.get('Nivel de Interés'), data.get('Resumen Conversación'), data.get('Fecha Próx. Contacto'), data.get('Estado Final', 'Seguimiento'), data.get('Asesora')))
+            elif action_type == "UPDATE":
+                query_find = "SELECT fecha_proxima FROM prospectos WHERE id_unico = ? OR nombre = ?"
+                existing = cursor.execute(query_find, (id_unico, nombre_ref)).fetchone()
+                cita_anterior = existing[0] if existing else "--"
+                updates = data.get('updates', {})
+                sql_parts = ["validacion = 'PENDIENTE'", "updated_at = CURRENT_TIMESTAMP"]
+                params = []
+                mapping_db = {'Estado Final': 'estado_final', 'Nivel de Interés': 'nivel_interes', 'Fecha Próx. Contacto': 'fecha_proxima', 'Comentarios': 'comentarios', 'nombre': 'nombre'}
+                for ui_key, db_col in mapping_db.items():
+                    if ui_key in updates:
+                        sql_parts.append(f"{db_col} = ?")
+                        params.append(updates[ui_key])
+                for i in range(1, 31):
+                    f_ui, n_ui = f'Fecha Seguimiento {i}', f'Notas Seguimiento {i}'
+                    if f_ui in updates:
+                        sql_parts.append(f"fecha_seguimiento_{i} = ?")
+                        params.append(updates[f_ui])
+                    if n_ui in updates:
+                        final_note = f"Anterior: {cita_anterior}\n{updates[n_ui]}"
+                        sql_parts.append(f"notas_seguimiento_{i} = ?")
+                        params.append(final_note)
+                        data['updates'][n_ui] = final_note
+                query_where = "WHERE id_unico = ?" if id_unico and len(id_unico) > 3 else "WHERE nombre = ?"
+                params.append(id_unico if id_unico and len(id_unico) > 3 else nombre_ref)
+                cursor.execute(f"UPDATE prospectos SET {', '.join(sql_parts)} {query_where}", params)
             try:
-                cursor.execute('INSERT INTO sync_queue (sync_id, type, phone, payload) VALUES (?, ?, ?, ?)', (sync_id, action_type, data.get('Canal', '000'), json.dumps(data)))
-                conn.commit()
-                self._log_event(sync_id, "INFO", "Encolado en SQLite", agent)
-            except sqlite3.IntegrityError:
-                conn.close()
-                return True, "Ya se encuentra en cola de espera"
+                cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', (sync_id, action_type, id_unico or nombre_ref, json.dumps(data)))
+            except sqlite3.IntegrityError: pass 
+            conn.commit()
             conn.close()
-            return True, "Registrado correctamente"
-        except Exception as e: return False, str(e)
+            return True, "Sincronización local exitosa."
+        except Exception as e:
+            logger.error(f"Error Master: {e}")
+            return False, str(e)
 
     def process_queue_step(self):
-        """
-        Versión Corregida (8.2): Implementa Locking para evitar duplicados.
-        """
         conn = self._get_conn()
         cursor = conn.cursor()
-        # 1. Seleccionar el siguiente pendiente
-        cursor.execute("SELECT id, type, payload, sync_id FROM sync_queue WHERE status = 'PENDING' ORDER BY id ASC LIMIT 1")
+        cursor.execute("SELECT id, type, payload, sync_id, phone_id FROM sync_queue WHERE status = 'PENDING' ORDER BY id ASC LIMIT 1")
         row = cursor.fetchone()
-        
         if not row:
             conn.close()
             return
-            
-        q_id, q_type, q_payload, q_sync_id = row
-        
-        # 2. BLOQUEO: Marcar como SYNCING inmediatamente para que otro ciclo no lo tome
-        cursor.execute("UPDATE sync_queue SET status = 'SYNCING' WHERE id = ?", (q_id,))
+        q_id, q_type, q_payload, q_sync_id, q_phone_id = row
+        cursor.execute("UPDATE sync_queue SET status = 'PROCESSING' WHERE id = ?", (q_id,))
         conn.commit()
-        conn.close() # Liberamos conexión para el proceso largo de subida
-
         data = json.loads(q_payload)
-        success, message, drive_url = self._upload_to_google(q_type, data)
-        
+        success, message, folder_url = self._upload_to_google(q_type, data)
         if success:
-            if 'files_payload' in data: data['files_payload'] = "[CLEANED]"
-            self._update_queue_status(q_id, "SUCCESS", drive_url=drive_url, clean_payload=json.dumps(data))
+            cursor.execute("UPDATE sync_queue SET status = 'SUCCESS' WHERE id = ?", (q_id,))
+            if q_type != "DELETE":
+                cursor.execute("UPDATE prospectos SET imagenes_url = ?, validacion = 'OK' WHERE id_unico = ? OR nombre = ?", (folder_url or "", q_phone_id, data.get('nombre_original') or data.get('Nombre')))
             self._write_to_journal(q_type, data, "SUCCESS")
         else:
-            # Si falla, se devuelve a PENDING para reintento en el siguiente ciclo
-            self._update_queue_status(q_id, "PENDING", error=message)
+            cursor.execute("UPDATE sync_queue SET status = 'PENDING' WHERE id = ?", (q_id,))
+        conn.commit()
+        conn.close()
 
     def _upload_to_google(self, q_type, data):
         try:
-            sheet = self.workbook.worksheet("Seguimientos")
+            ws = self.workbook.worksheet("Seguimientos")
             sync_id = data.get('sync_id')
+            headers = ws.row_values(1)
             try:
-                if sheet.find(sync_id): return True, "Ya sincronizado", ""
+                if ws.find(sync_id): return True, "Sync anterior OK", None
             except: pass
 
-            prefix = "Registro_Inicial"
-            if q_type == "UPDATE":
-                updates = data.get('updates', {})
-                nums = [int(k.split()[-1]) for k in updates.keys() if "Seguimiento" in k and k.split()[-1].isdigit()]
-                n_seguimiento = max(nums) if nums else "X"
-                prefix = f"Seguimiento_{n_seguimiento}"
+            if q_type == "DELETE":
+                canal_val = "".join(filter(str.isdigit, str(data.get('canal'))))[-10:]
+                cell = ws.find(canal_val)
+                if cell: ws.delete_rows(cell.row)
+                img_url = data.get('imagenes_url')
+                if img_url and "folders/" in img_url:
+                    try:
+                        f_id = img_url.split("folders/")[1].split("?")[0].split("/")[0]
+                        requests.post(self.SCRIPT_URL, json={"action": "delete", "folderId": f_id}, timeout=15)
+                    except: pass
+                return True, "Eliminación OK", None
 
-            folder_url = ""
-            files = data.get('files_payload', [])
-            if files and isinstance(files, list):
-                for i, f in enumerate(files):
-                    custom_name = f"{prefix}_{sync_id}_{i}"
-                    res = self._send_to_script(data.get('Nombre') or data.get('nombre_original'), f, custom_name)
-                    if res and res.get('status') == 'success':
-                        folder_url = res.get('folderUrl', folder_url)
+            if q_type == "RENAME":
+                canal_val = "".join(filter(str.isdigit, str(data.get('canal'))))[-10:]
+                cell = ws.find(canal_val)
+                if not cell: return False, "Canal no encontrado", None
+                col_nombre = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(self.FIELD_MAP['nombre'])), 1)
+                ws.update_cell(cell.row, col_nombre, data.get('new_name'))
+                return True, "Renombrado OK", None
+
+            folder_url = None
+            files_payload = data.get('files_payload', [])
+            if files_payload:
+                for idx, file_item in enumerate(files_payload):
+                    img_resp = self._send_to_script(data, file_item, f"evidencia_{idx}.png")
+                    if img_resp and img_resp.get('status') == 'success':
+                        folder_url = img_resp.get('folderUrl')
 
             if q_type == "ADD":
-                headers = sheet.row_values(1)
-                row_map = {
-                    'Nombre': data.get('Nombre'), 'Canal (Tel/WhatsApp)': data.get('Canal'),
-                    'Fecha 1er Contacto': data.get('Fecha 1er Contacto'), 'Nivel de Interés': data.get('Nivel de Interés'),
-                    'Resumen Conversación': data.get('Resumen Conversación'), 'Fecha Próx. Contacto': data.get('Fecha Próx. Contacto'),
-                    'Asesora': data.get('Asesora'), 'Estado Final': data.get('Estado Final', 'Seguimiento'),
-                    'Imagenes': folder_url, 'ID Sincronización': sync_id
-                }
-                headers = self._ensure_columns(sheet, headers, row_map.keys())
-                sheet.append_row([str(row_map.get(h, "")) for h in headers])
+                row_map = {self.FIELD_MAP['nombre']: data.get('Nombre'), self.FIELD_MAP['canal']: data.get('Canal'), self.FIELD_MAP['id_unico']: sync_id, self.FIELD_MAP['imagenes_url']: folder_url or ""}
+                headers = self._ensure_columns(ws, headers, row_map.keys())
+                ws.append_row([str(row_map.get(h, "")) for h in headers])
                 return True, "Ok", folder_url
             else:
-                name = data.get('nombre_original')
-                cell = sheet.find(name)
-                if not cell: return False, "No encontrado en Sheets", None
+                cell = ws.find(data.get('nombre_original'))
+                if not cell: return False, "No existe", None
                 updates = data.get('updates', {})
-                if folder_url: updates['Imagenes'] = folder_url
-                updates['ID Sincronización'] = sync_id
-                headers = sheet.row_values(1)
-                headers = self._ensure_columns(sheet, headers, updates.keys())
+                sheet_updates = { self.FIELD_MAP.get(k, k): v for k, v in updates.items() }
+                sheet_updates[self.FIELD_MAP['id_unico']] = sync_id
+                if folder_url: sheet_updates[self.FIELD_MAP['imagenes_url']] = folder_url
                 batch = []
-                for k, v in updates.items():
+                for k, v in sheet_updates.items():
                     col_i = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(k)), None)
                     if col_i: batch.append({'range': gspread.utils.rowcol_to_a1(cell.row, col_i), 'values': [[str(v)]]})
-                if batch: sheet.batch_update(batch)
+                if batch: ws.batch_update(batch)
                 return True, "Ok", folder_url
-        except Exception as e: return False, str(e), None
+        except Exception as e:
+            return False, str(e), None
 
-    def delete_client(self, nombre):
-        """
-        Recuperación Crítica (8.2): Elimina en Sheets, Drive y Borrado Espejo en SQLite.
-        """
+    def _send_to_script(self, data, file_item, filename):
         try:
-            sheet = self.workbook.worksheet("Seguimientos")
-            cell = sheet.find(nombre)
-            if cell:
-                # 1. Intentar eliminar la carpeta de Drive
-                try:
-                    headers = sheet.row_values(1)
-                    img_col_idx = next(i+1 for i, h in enumerate(headers) if self._normalize(h) == 'imagenes')
-                    folder_url = sheet.cell(cell.row, img_col_idx).value
-                    if folder_url:
-                        match = re.search(r'([a-zA-Z0-9\-_]{25,50})', folder_url)
-                        if match:
-                            folder_id = match.group(1)
-                            requests.post(self.SCRIPT_URL, json={"action": "delete", "folderId": folder_id}, timeout=30)
-                except Exception as e_drive:
-                    logger.warning(f"No se pudo eliminar la carpeta de Drive para {nombre}: {e_drive}")
+            payload = {"parentFolderId": self.PARENT_FOLDER_ID, "clientName": data.get('Nombre') or data.get('nombre_original'), "filename": filename, "base64Data": file_item['base64Data'], "contentType": file_item['contentType']}
+            resp = requests.post(self.SCRIPT_URL, json=payload, timeout=30)
+            return resp.json()
+        except: return None
 
-                # 2. Borrar la fila en Sheets
-                sheet.delete_rows(cell.row)
+    def get_clients_for_agent(self, agent_name):
+        conn = self._get_conn(); conn.row_factory = sqlite3.Row; cursor = conn.cursor()
+        cursor.execute("SELECT * FROM prospectos WHERE LOWER(asesora) = LOWER(?) ORDER BY updated_at DESC", (agent_name,))
+        rows = [dict(r) for r in cursor.fetchall()]; conn.close(); return rows
 
-                # 3. BORRADO ESPEJO: Limpiar la base de datos local de cualquier rastro del cliente
-                try:
-                    conn = self._get_conn()
-                    cursor = conn.cursor()
-                    # Borramos registros cuyo payload contenga el nombre del cliente
-                    cursor.execute("DELETE FROM sync_queue WHERE payload LIKE ?", (f'%"{nombre}"%',))
-                    conn.commit()
-                    conn.close()
-                    logger.info(f"Limpieza SQLite exitosa para: {nombre}")
-                except Exception as e_db:
-                    logger.error(f"Error en limpieza SQLite: {e_db}")
-
-                self._write_to_journal("DELETE", {"Nombre": nombre}, "SUCCESS")
-                return True, "Eliminado y Limpiado"
-            return False, "No hallado"
-        except Exception as e: return False, str(e)
-
-    def _is_already_success(self, sync_id):
-        conn = self._get_conn()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM sync_queue WHERE sync_id = ? AND status = 'SUCCESS'", (sync_id,))
-        res = cursor.fetchone()
-        conn.close()
-        return res is not None
-
-    def _update_queue_status(self, q_id, status, drive_url=None, error=None, clean_payload=None):
-        conn = self._get_conn()
-        cursor = conn.cursor()
-        now = datetime.now().isoformat()
-        if clean_payload:
-            cursor.execute("UPDATE sync_queue SET status=?, drive_url=?, error_message=?, synced_at=?, payload=? WHERE id=?", (status, drive_url, error, now, clean_payload, q_id))
-        else:
-            cursor.execute("UPDATE sync_queue SET status=?, drive_url=?, error_message=?, synced_at=? WHERE id=?", (status, drive_url, error, now, q_id))
-        conn.commit()
-        conn.close()
-
-    def _write_to_journal(self, action, data, status):
+    def get_all_clients(self):
         try:
-            os.makedirs(os.path.dirname(self.journal_path), exist_ok=True)
-            entry = {"t": datetime.now().isoformat(), "act": action, "st": status, "sid": data.get('sync_id'), "name": data.get('Nombre') or data.get('nombre_original')}
-            with open(self.journal_path, "a", encoding="utf-8") as f: f.write(json.dumps(entry) + "\n")
-        except: pass
+            conn = self._get_conn(); conn.row_factory = sqlite3.Row; cursor = conn.cursor()
+            cursor.execute("SELECT * FROM prospectos ORDER BY updated_at DESC")
+            rows = [dict(r) for r in cursor.fetchall()]; conn.close(); return rows
+        except: return []
 
     def _normalize(self, text):
         if not text: return ""
@@ -315,37 +405,19 @@ class DataHandler:
         return "".join(e for e in text if e.isalnum())
 
     def _ensure_columns(self, sheet, headers, required):
-        updated = list(headers)
-        norm_h = [self._normalize(h) for h in updated]
-        added = False
+        updated = list(headers); norm_h = [self._normalize(h) for h in updated]; added = False
         for col in required:
-            if self._normalize(col) not in norm_h:
-                updated.append(col)
-                norm_h.append(self._normalize(col))
-                added = True
+            sheet_col_name = self.FIELD_MAP.get(col, col)
+            if self._normalize(sheet_col_name) not in norm_h:
+                updated.append(sheet_col_name); added = True
         if added: sheet.update('A1', [updated])
         return updated
 
-    def _send_to_script(self, client_name, file_payload, custom_filename):
+    def _write_to_journal(self, action, data, status):
         try:
-            payload = {"parentFolderId": self.PARENT_FOLDER_ID, "clientName": client_name, "filename": f"{custom_filename}.png", "contentType": file_payload.get('contentType', 'image/png'), "base64Data": file_payload.get('base64Data')}
-            return requests.post(self.SCRIPT_URL, json=payload, timeout=60).json()
-        except: return None
+            os.makedirs(os.path.dirname(self.journal_path), exist_ok=True)
+            entry = {"t": datetime.now().isoformat(), "act": action, "st": status, "sid": data.get('sync_id'), "name": data.get('Nombre') or data.get('nombre_original')}
+            with open(self.journal_path, "a", encoding="utf-8") as f: f.write(json.dumps(entry) + "\n")
+        except: pass
 
-    def get_active_agents(self):
-        try: return self.workbook.worksheet("AsesorasActivas").get_all_records()
-        except: return []
-
-    def get_auditors(self):
-        try: return self.workbook.worksheet("Auditores").get_all_records()
-        except: return []
-
-    def get_clients_for_agent(self, agent_name):
-        try:
-            data = self.workbook.worksheet("Seguimientos").get_all_records()
-            return [row for row in data if str(row.get('Asesora', '')).lower() == agent_name.lower()]
-        except: return []
-
-    def get_all_clients(self):
-        try: return self.workbook.worksheet("Seguimientos").get_all_records()
-        except: return []
+handler = DataHandler()

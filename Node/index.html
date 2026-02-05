@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRM Profesional - Versión 5.6 (Memory Shield)</title>
+    <title>CRM Profesional - Versión 6.2 (Trazabilidad Silenciosa)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -16,37 +16,26 @@
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
             transition: background-color 0.5s ease;
-            font-size: 18px;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
         }
 
         .glass {
             background: rgba(255, 255, 255, 0.95);
             -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
-            position: relative;
-            z-index: 1;
         }
 
-        .custom-scroll::-webkit-scrollbar {
-            width: 5px;
-        }
-
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-
-        .read-only-box {
-            @apply p-3 bg-slate-50 border border-slate-100 rounded-xl font-semibold text-slate-500 text-xs italic;
-        }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
         .chrome-tab-container {
-            @apply flex gap-1 bg-slate-200/40 pt-2 px-4 rounded-t-[2.5rem] border-b border-slate-200;
+            @apply flex gap-1 bg-slate-100/80 pt-2 px-4 rounded-t-[2.5rem] border-b border-slate-200;
         }
 
         .chrome-tab {
-            @apply relative px-5 py-3 text-[11px] font-extrabold uppercase tracking-[0.05em] cursor-pointer transition-all rounded-t-xl text-slate-400 hover:bg-white/40 flex items-center gap-2;
-            min-width: 160px;
+            @apply relative px-5 py-3 text-[10px] font-extrabold uppercase tracking-widest cursor-pointer transition-all rounded-t-xl text-slate-400 flex items-center gap-2;
+            min-width: 140px;
             justify-content: center;
             border: none;
             outline: none;
@@ -54,46 +43,26 @@
         }
 
         .chrome-tab-active {
-            @apply bg-white shadow-[0_-2px_8px_rgba(0, 0, 0, 0.03)] z-10 text-slate-700;
+            @apply bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.03)] z-10 text-slate-700;
         }
 
-        .chrome-tab-active::before,
-        .chrome-tab-active::after {
-            content: '';
-            @apply absolute bottom-0 w-3 h-3 bg-transparent pointer-events-none;
+        .chrome-tab-active::before, .chrome-tab-active::after {
+            content: ''; @apply absolute bottom-0 w-3 h-3 bg-transparent pointer-events-none;
         }
+        .chrome-tab-active::before { left: -12px; @apply rounded-br-xl; box-shadow: 6px 0 0 0 white; }
+        .chrome-tab-active::after { right: -12px; @apply rounded-bl-xl; box-shadow: -6px 0 0 0 white; }
 
-        .chrome-tab-active::before {
-            left: -12px;
-            @apply rounded-br-xl;
-            box-shadow: 6px 0 0 0 white;
+        @keyframes pulse-sync {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.98); }
         }
+        .sync-active { animation: pulse-sync 2s infinite ease-in-out; }
 
-        .chrome-tab-active::after {
-            right: -12px;
-            @apply rounded-bl-xl;
-            box-shadow: -6px 0 0 0 white;
-        }
-
-        @keyframes cloudPulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(0.95); }
-            100% { opacity: 1; transform: scale(1); }
-        }
-
-        .sync-active {
-            animation: cloudPulse 2s infinite ease-in-out;
-        }
-
-        .warning-shake {
-            animation: shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
-        }
-
+        .warning-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
         @keyframes shake {
             10%, 90% { transform: translate3d(-1px, 0, 0); }
-            20%, 80% { transform: translate3d(2px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-            40%, 60% { transform: translate3d(4px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
+            40%, 60% { transform: translate3d(3px, 0, 0); }
         }
     </style>
 </head>
@@ -120,42 +89,6 @@
 
         const ESTADO_OPTIONS = ["Seguimiento", "Venta", "Contactar más tarde", "No interesado"];
 
-        // --- MOTOR DE COMPRESIÓN QUIRÚRGICO (Inyectado para v5.6) ---
-        const compressImage = (file) => {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const MAX_WIDTH = 1000; // Resolución optimizada para CRM
-                        let width = img.width;
-                        let height = img.height;
-
-                        if (width > MAX_WIDTH) {
-                            height *= MAX_WIDTH / width;
-                            width = MAX_WIDTH;
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        // Conversión a JPEG con calidad 0.7 (70%)
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                        resolve({
-                            base64Data: dataUrl.split(',')[1],
-                            contentType: 'image/jpeg',
-                            name: file.name.replace(/\.[^/.]+$/, "") + ".jpg"
-                        });
-                    };
-                };
-            });
-        };
-
         const getMexicoDate = () => {
             return new Intl.DateTimeFormat('en-CA', {
                 timeZone: 'America/Mexico_City',
@@ -163,10 +96,35 @@
             }).format(new Date());
         };
 
-        const generateSyncId = () => `SYNC_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        const normalizeData = (data) => {
+            if (!data) return {};
+            const normalized = { ...data };
+            for (let i = 1; i <= 30; i++) {
+                const sqlFecha = `fecha_seguimiento_${i}`;
+                const sqlNota = `notas_seguimiento_${i}`;
+                const uiFecha = `Fecha Seguimiento ${i}`;
+                const uiNota = `Notas Seguimiento ${i}`;
+                if (data[sqlFecha] !== undefined) normalized[uiFecha] = data[sqlFecha];
+                if (data[sqlNota] !== undefined) normalized[uiNota] = data[sqlNota];
+            }
+            normalized.Nombre = data.nombre || data.Nombre || "Sin Nombre";
+            normalized.Canal = data.canal || data.Canal || data['Canal (Tel/WhatsApp)'] || "";
+            normalized['Estado Final'] = data.estado_final || data['Estado Final'] || "Seguimiento";
+            normalized['Nivel de Interés'] = data.nivel_interes || data['Nivel de Interés'] || "";
+            normalized['Fecha Próx. Contacto'] = data.fecha_proxima || data['Fecha Próx. Contacto'] || "";
+            normalized['Fecha 1er Contacto'] = data.fecha_registro || data['Fecha 1er Contacto'] || "";
+            normalized['Resumen Conversación'] = data.resumen || data['Resumen Conversación'] || "";
+            normalized.Comentarios = data.comentarios || data.Comentarios || "";
+            normalized.Imagenes = data.imagenes_url || data.Imagenes || "";
+            const cleanPhone = normalized.Canal.toString().replace(/\D/g, '').slice(-10);
+            normalized.id_unico = data.id_unico || `ID_${cleanPhone}`;
+            return normalized;
+        };
+
+        const generateSyncId = () => `ID_${Date.now()}_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
         const toInputDate = (str) => {
-            if (!str || !str.includes('/')) return str;
+            if (!str || !str.includes('/')) return str || '';
             const [d, m, y] = str.split('/');
             return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
         };
@@ -178,31 +136,30 @@
             return `${d}/${m}/${y}`;
         };
 
-        const addToBlackBox = (action, payload) => {
-            const history = JSON.parse(localStorage.getItem('crm_blackbox_25') || '[]');
-            history.unshift({ timestamp: new Date().getTime(), action, payload });
-            if (history.length > 25) history.pop();
-            localStorage.setItem('crm_blackbox_25', JSON.stringify(history));
-        };
-
-        const downloadBackup = (data, name, process = 'RESPALDO') => {
-            const timestamp = new Date().getTime();
-            const cleanName = name.replace(/\s+/g, '_');
-            const fileName = `${cleanName}_${process}_${timestamp}.json`;
-            const json = JSON.stringify(data, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
-            const href = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = href;
-            link.download = fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+        const LoginScreen = ({ agents, onLogin, loading, theme }) => {
+            const [sel, setSel] = useState('');
+            const [pass, setPass] = useState('');
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
+                    <div className="max-w-md w-full glass p-12 rounded-[4rem] shadow-2xl text-center border border-white">
+                        <div className="w-24 h-24 mx-auto rounded-[2.5rem] flex items-center justify-center text-white mb-10 shadow-2xl" style={{ backgroundColor: theme.primary }}><i className="fas fa-fingerprint text-4xl"></i></div>
+                        <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase mb-12 leading-none">Acceso Seguro<br />CRM Handshake</h2>
+                        <div className="space-y-6 text-left">
+                            <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner cursor-pointer" value={sel} onChange={e => setSel(e.target.value)}>
+                                <option value="">Seleccionar Asesora...</option>
+                                {agents.map(a => <option key={a} value={a}>{a}</option>)}
+                            </select>
+                            <input type="password" placeholder="Clave de Acceso" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} />
+                            <button onClick={() => onLogin(sel, pass)} disabled={loading || !sel || !pass} className="w-full py-6 rounded-3xl text-white font-black text-base shadow-2xl transition-all hover:brightness-110 uppercase tracking-widest border-none outline-none cursor-pointer" style={{ backgroundColor: theme.primary }}>{loading ? 'CARGANDO...' : 'ENTRAR'}</button>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
         const App = () => {
             const [user, setUser] = useState(localStorage.getItem('crm_user') || null);
-            const [theme, setTheme] = useState(localStorage.getItem('crm_theme') || 'ocean');
+            const [themeKey, setThemeKey] = useState(localStorage.getItem('crm_theme') || 'ocean');
             const [agents, setAgents] = useState([]);
             const [clients, setClients] = useState([]);
             const [loading, setLoading] = useState(false);
@@ -213,11 +170,11 @@
             const [pendingCount, setPendingCount] = useState(0);
             const [showHistoryModal, setShowHistoryModal] = useState(false);
             const [currentPage, setCurrentPage] = useState(1);
-            const fileInputRef = useRef(null);
+            
             const isSyncing = useRef(false);
-
-            const activeTheme = THEMES[theme];
             const entriesPerPage = 15;
+
+            const activeTheme = useMemo(() => THEMES[themeKey] || THEMES.ocean, [themeKey]);
 
             useEffect(() => {
                 fetchAgents();
@@ -225,13 +182,31 @@
                     fetchClients(user);
                     processQueue();
                 }
-                const timer = setInterval(() => { processQueue(); }, 30000);
-                return () => clearInterval(timer);
+                const interval = setInterval(processQueue, 30000);
+                return () => clearInterval(interval);
             }, [user]);
 
-            useEffect(() => {
-                setCurrentPage(1);
-            }, [filters]);
+            useEffect(() => { setCurrentPage(1); }, [filters]);
+
+            const fetchAgents = async () => {
+                try {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents');
+                    const data = await res.json();
+                    if (Array.isArray(data)) setAgents(data);
+                } catch (e) { console.error(e); }
+            };
+
+            const fetchClients = async (name) => {
+                setLoading(true);
+                try {
+                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${encodeURIComponent(name)}&t=${Date.now()}`);
+                    const data = await res.json();
+                    if (Array.isArray(data)) {
+                        setClients(data.map(normalizeData));
+                    }
+                } catch (e) { console.error(e); }
+                setLoading(false);
+            };
 
             const processQueue = async () => {
                 if (isSyncing.current) return;
@@ -252,14 +227,12 @@
                             body: JSON.stringify(item.payload)
                         });
                         const data = await res.json();
-                        if (data.status === 'success' || (data.message && data.message.includes('ya existe'))) {
+                        if (data.status === 'success' || data.message?.includes('ya existe')) {
                             newQueue.splice(i, 1);
                             i--;
                             changed = true;
                         } else { break; }
-                    } catch (err) {
-                        break;
-                    }
+                    } catch (err) { break; }
                 }
 
                 if (changed) {
@@ -270,359 +243,215 @@
                 isSyncing.current = false;
             };
 
-            const handleCloseModal = () => {
-                setModal(null);
-                setSelectedClient(null);
-                processQueue();
-            };
+            const filteredClients = useMemo(() => {
+                const search = filters.name.toLowerCase();
+                const todayMx = new Date(getMexicoDate() + "T00:00:00");
+                const tomorrowMx = new Date(todayMx); tomorrowMx.setDate(todayMx.getDate() + 1);
 
-            const fetchAgents = async () => {
-                try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents');
-                    const data = await res.json();
-                    if (Array.isArray(data)) setAgents(data);
-                } catch (err) { console.error(err); }
-            };
+                return clients.filter(c => {
+                    const cName = (c.Nombre || '').toLowerCase();
+                    const cPhone = (c.Canal || '').toString();
+                    const matchesSearch = cName.includes(search) || cPhone.includes(search);
+                    const matchesStatus = filters.status === '' || c['Estado Final'] === filters.status;
+                    const matchesInterest = filters.interest === '' || (c['Nivel de Interés'] || '').includes(filters.interest);
+                    
+                    let matchesDate = true;
+                    if (filters.dateRange !== '') {
+                        const proxStr = c['Fecha Próx. Contacto'];
+                        if (!proxStr || proxStr === '--') { matchesDate = false; } else {
+                            const [d, m, y] = proxStr.split('/').map(Number);
+                            const pDate = new Date(y, m - 1, d);
+                            const tVal = pDate.getTime();
+                            if (filters.dateRange === 'hoy') matchesDate = tVal === todayMx.getTime();
+                            else if (filters.dateRange === 'mañana') matchesDate = tVal === tomorrowMx.getTime();
+                            else if (filters.dateRange === 'vencido') matchesDate = tVal < todayMx.getTime();
+                            else if (filters.dateRange === 'futuro') matchesDate = tVal > tomorrowMx.getTime();
+                        }
+                    }
+                    return matchesSearch && matchesStatus && matchesInterest && matchesDate;
+                }).sort((a, b) => {
+                    const dA = (a['Fecha 1er Contacto'] || '').split('/').reverse().join('');
+                    const dB = (b['Fecha 1er Contacto'] || '').split('/').reverse().join('');
+                    return dB.localeCompare(dA);
+                });
+            }, [clients, filters]);
 
-            const fetchClients = async (name) => {
-                setLoading(true);
-                try {
-                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${name}&t=${Date.now()}`);
-                    const data = await res.json();
-                    setClients(data);
-                } catch (err) { console.error(err); }
-                setLoading(false);
-            };
+            const paginatedClients = useMemo(() => {
+                const start = (currentPage - 1) * entriesPerPage;
+                return filteredClients.slice(start, start + entriesPerPage);
+            }, [filteredClients, currentPage]);
 
+            const totalPages = Math.max(1, Math.ceil(filteredClients.length / entriesPerPage));
+
+            // ARREGLO DE LOGIN: Implementación correcta de handleLogin utilizando el estado del componente
             const handleLogin = async (name, password) => {
                 setLoading(true);
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nombre: name, password })
+                        body: JSON.stringify({ nombre: name.trim(), password: password.trim() })
                     });
                     const data = await res.json();
                     if (data.status === 'success') {
-                        setUser(name);
-                        localStorage.setItem('crm_user', name);
-                        fetchClients(name);
+                        // Guardamos y actualizamos estado
+                        localStorage.setItem('crm_user', data.nombre);
+                        setUser(data.nombre);
+                        fetchClients(data.nombre);
                     } else {
-                        setStatusAlert({ type: 'error', title: 'Acceso Denegado', message: data.message || "Credenciales inválidas" });
+                        setStatusAlert({ type: 'error', title: 'Acceso Denegado', message: data.message });
                     }
-                } catch (err) {
-                    setStatusAlert({ type: 'error', title: 'Fallo de Red', message: "No se pudo conectar con el servidor." });
+                } catch (e) {
+                    setStatusAlert({ type: 'error', title: 'Error Localhost', message: "No se puede contactar con el servidor local." });
                 }
                 setLoading(false);
             };
 
-            const handleImportJSON = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const data = JSON.parse(event.target.result);
-                        if (data.nombre_original) {
-                            setSelectedClient(data.client_reference);
-                            setModal('edit');
-                        } else {
-                            setModal('new');
-                        }
-                        window._importedBackup = data;
-                    } catch (err) {
-                        setStatusAlert({ type: 'error', title: 'Archivo Inválido', message: "Formato de respaldo no reconocido." });
-                    }
-                };
-                reader.readAsText(file);
-                e.target.value = null;
-            };
-
-            const filteredClients = useMemo(() => {
-                const search = filters.name.toLowerCase();
-                const today = new Date(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City' }).format(new Date()));
-                today.setHours(0, 0, 0, 0);
-                const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-
-                let result = clients.filter(c => {
-                    const matchesSearch = c.Nombre.toLowerCase().includes(search) || (c['Canal (Tel/WhatsApp)'] || c['Canal'] || '').toString().includes(search);
-                    const matchesStatus = filters.status === '' || c['Estado Final'] === filters.status;
-                    const matchesInterest = filters.interest === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interest));
-                    let matchesDate = true;
-                    if (filters.dateRange !== '') {
-                        const proxStr = c['Fecha Próx. Contacto'];
-                        if (!proxStr) { matchesDate = false; } else {
-                            const [d, m, y] = proxStr.split('/').map(Number);
-                            const proxDate = new Date(y, m - 1, d); proxDate.setHours(0, 0, 0, 0);
-                            const timeVal = proxDate.getTime();
-                            if (filters.dateRange === 'hoy') matchesDate = timeVal === today.getTime();
-                            else if (filters.dateRange === 'mañana') matchesDate = timeVal === tomorrow.getTime();
-                            else if (filters.dateRange === 'futuro') matchesDate = timeVal > tomorrow.getTime();
-                            else if (filters.dateRange === 'vencido') matchesDate = timeVal < today.getTime();
-                        }
-                    }
-                    return matchesSearch && matchesStatus && matchesInterest && matchesDate;
-                });
-
-                return result.sort((a, b) => {
-                    const dateA = (a['Fecha 1er Contacto'] || '').split('/').reverse().join('');
-                    const dateB = (b['Fecha 1er Contacto'] || '').split('/').reverse().join('');
-                    return dateB.localeCompare(dateA);
-                });
-            }, [clients, filters]);
-
-            const paginatedClients = useMemo(() => {
-                const startIndex = (currentPage - 1) * entriesPerPage;
-                return filteredClients.slice(startIndex, startIndex + entriesPerPage);
-            }, [filteredClients, currentPage]);
-
-            const totalPages = Math.ceil(filteredClients.length / entriesPerPage);
-
             if (!user) return <LoginScreen agents={agents} onLogin={handleLogin} loading={loading} theme={activeTheme} />;
 
             return (
-                <div className={`min-h-screen ${activeTheme.bg} p-4 md:p-6 transition-all duration-500`}>
-                    <header className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center mb-8">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md" style={{ backgroundColor: activeTheme.primary }}>
-                                <i className="fas fa-users-cog text-xl"></i>
+                <div className={`min-h-screen ${activeTheme.bg} p-4 md:p-8 transition-colors duration-500`}>
+                    <header className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center mb-10">
+                        <div className="flex items-center gap-5">
+                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-xl" style={{ backgroundColor: activeTheme.primary }}>
+                                <i className="fas fa-server text-2xl"></i>
                             </div>
                             <div>
-                                <h1 className="text-xl font-extrabold text-slate-800 tracking-tight uppercase">Gestión Asesora</h1>
-                                <p className="text-slate-400 text-[8px] font-bold uppercase tracking-widest leading-none">Agente: <span className="text-slate-800">{user}</span> • Handshake On</p>
+                                <h1 className="text-2xl font-black text-slate-800 tracking-tighter uppercase leading-none">CRM Handshake</h1>
+                                <p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.2em] mt-1.5">Asesora: <span className="text-slate-900">{user}</span> • Versión 6.1 Maestro</p>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4 mt-4 md:mt-0">
-                            <button onClick={() => setShowHistoryModal(true)} title="Historial Local" className="w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-sky-500 shadow-sm transition-all outline-none">
-                                <i className="fas fa-history text-sm"></i>
-                            </button>
-
-                            <div className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-500 ${pendingCount > 0 ? 'bg-amber-50 text-amber-600 border-amber-100 sync-active' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                                <i className={`fas ${pendingCount > 0 ? 'fa-cloud-upload-alt' : 'fa-cloud-check'} text-[10px]`}></i>
-                                <span className="text-[9px] font-black uppercase tracking-widest">
-                                    {pendingCount > 0 ? `${pendingCount} Sincronizando...` : 'Nube Protegida'}
-                                </span>
+                        <div className="flex items-center gap-4 mt-6 md:mt-0">
+                            <div className={`flex items-center gap-3 px-5 py-2.5 rounded-full border transition-all ${pendingCount > 0 ? 'bg-amber-50 text-amber-600 border-amber-200 sync-active' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                <i className={`fas ${pendingCount > 0 ? 'fa-cloud-upload-alt' : 'fa-check-circle'} text-xs`}></i>
+                                <span className="text-[10px] font-black uppercase tracking-widest">{pendingCount > 0 ? `${pendingCount} Sincronizando` : 'DB Local al Día'}</span>
                             </div>
 
-                            <div className="flex items-center gap-3 glass p-1.5 rounded-full shadow-sm border border-white">
+                            <div className="flex items-center gap-3 glass p-2 rounded-full shadow-sm border border-white">
                                 {Object.keys(THEMES).map(t => (
-                                    <button key={t} onClick={() => { setTheme(t); localStorage.setItem('crm_theme', t); }} className={`w-6 h-6 rounded-full transition-all ${theme === t ? 'ring-2 ring-offset-1 ring-slate-300 scale-105' : 'opacity-40 hover:opacity-100'}`} style={{ backgroundColor: THEMES[t].primary }} />
+                                    <button key={t} onClick={() => { setThemeKey(t); localStorage.setItem('crm_theme', t); }} className={`w-6 h-6 rounded-full transition-all ${themeKey === t ? 'ring-2 ring-offset-2 ring-slate-300 scale-110 shadow-md' : 'opacity-30 hover:opacity-100'}`} style={{ backgroundColor: THEMES[t].primary }} />
                                 ))}
-                                <div className="w-px h-4 bg-slate-200 mx-1" />
-                                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-slate-300 hover:text-red-500 p-1.5 transition-colors border-none outline-none bg-transparent"><i className="fas fa-power-off text-sm"></i></button>
+                                <div className="w-px h-5 bg-slate-200 mx-1" />
+                                <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-slate-300 hover:text-red-500 p-1 transition-colors bg-transparent border-none outline-none"><i className="fas fa-power-off text-sm"></i></button>
                             </div>
                         </div>
                     </header>
 
                     <main className="max-w-6xl mx-auto">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
-                            <input type="text" placeholder="Filtrar prospecto..." className="w-full px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm focus:ring-2 focus:ring-offset-1 ring-sky-300 outline-none transition-all" value={filters.name} onChange={e => setFilters({ ...filters, name: e.target.value })} />
-                            <select className="px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm text-slate-500 outline-none cursor-pointer" value={filters.dateRange} onChange={e => setFilters({ ...filters, dateRange: e.target.value })}>
-                                <option value="">Vencimiento</option>
-                                <option value="vencid">Retrasados</option>
-                                <option value="hoy">Para Hoy</option>
-                                <option value="mañana">Para Mañana</option>
-                                <option value="futuro">Próximos</option>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+                            <div className="lg:col-span-2 relative">
+                                <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                                <input type="text" placeholder="Buscar expediente..." className="w-full pl-12 pr-5 py-4 rounded-2xl border-none shadow-sm font-bold text-xs focus:ring-2 focus:ring-sky-300 outline-none transition-all" value={filters.name} onChange={e => setFilters({ ...filters, name: e.target.value })} />
+                            </div>
+                            <select className="px-5 py-4 rounded-2xl border-none shadow-sm font-bold text-xs text-slate-500 outline-none cursor-pointer" value={filters.dateRange} onChange={e => setFilters({ ...filters, dateRange: e.target.value })}>
+                                <option value="">Semáforo</option>
+                                <option value="vencido">Vencidos 🔴</option>
+                                <option value="hoy">Para Hoy 🟠</option>
+                                <option value="mañana">Mañana 🟡</option>
+                                <option value="futuro">Próximos 🔵</option>
                             </select>
-                            <select className="px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm text-slate-500 outline-none cursor-pointer" value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}>
+                            <select className="px-5 py-4 rounded-2xl border-none shadow-sm font-bold text-xs text-slate-500 outline-none cursor-pointer" value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}>
                                 <option value="">Estado</option>
                                 {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                             </select>
-                            <select className="px-5 py-3 rounded-2xl border-none shadow-sm font-semibold text-sm text-slate-500 outline-none cursor-pointer" value={filters.interest} onChange={e => setFilters({ ...filters, interest: e.target.value })}>
-                                <option value="">Interés</option>
-                                {INTERES_OPTIONS.map(o => <option key={o} value={o.split(' <')[0]}>{o.split(' <')[0]}</option>)}
-                            </select>
-                            <button onClick={() => fileInputRef.current.click()} className="bg-slate-100 text-slate-500 font-bold py-3 px-4 rounded-2xl shadow-sm hover:bg-slate-200 transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-wider border border-slate-200 outline-none">
-                                <i className="fas fa-file-import"></i> Backup
+                            <button onClick={() => { setShowHistoryModal(true); }} className="bg-white text-slate-400 font-bold py-4 px-4 rounded-2xl shadow-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest border border-slate-100 outline-none">
+                                <i className="fas fa-history"></i> Sync Queue
                             </button>
-                            <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImportJSON} />
-                            <button onClick={() => setModal('new')} className="text-white font-bold py-3 px-6 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-wider border-none outline-none" style={{ backgroundColor: activeTheme.primary }}>
-                                <i className="fas fa-plus"></i> Registrar
+                            <button onClick={() => setModal('new')} className="text-white font-black py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest border-none outline-none" style={{ backgroundColor: activeTheme.primary }}>
+                                <i className="fas fa-plus-circle"></i> Nuevo
                             </button>
                         </div>
 
-                        <div className="glass rounded-[2.5rem] shadow-xl overflow-hidden border border-white">
+                        <div className="glass rounded-[3rem] shadow-2xl overflow-hidden border border-white">
                             <div className="overflow-x-auto custom-scroll">
                                 <table className="w-full text-left table-auto">
-                                    <thead className="bg-slate-50/40 border-b border-slate-100">
-                                        <tr className="text-slate-400 text-[9px] uppercase font-black tracking-widest">
-                                            <th className="px-6 py-4">Nombre</th>
-                                            <th className="px-6 py-4">Teléfono</th>
-                                            <th className="px-6 py-4">Interés</th>
-                                            <th className="px-6 py-4">Cita</th>
-                                            <th className="px-6 py-4">Estado</th>
-                                            <th className="px-6 py-4 text-right pr-10">Acción</th>
+                                    <thead className="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                                        <tr>
+                                            <th className="px-8 py-5">Prospecto</th>
+                                            <th className="px-8 py-5">WhatsApp</th>
+                                            <th className="px-8 py-5">Interés</th>
+                                            <th className="px-8 py-5">Próx. Contacto</th>
+                                            <th className="px-8 py-5">Estatus</th>
+                                            <th className="px-8 py-5 text-right pr-12">Acción</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {paginatedClients.length > 0 ? paginatedClients.map((c, i) => (
-                                            <tr key={i} className="hover:bg-white/60 transition-colors">
-                                                <td className="px-6 py-4 font-bold text-slate-700 text-xs">{c.Nombre}</td>
-                                                <td className="px-6 py-4 text-[11px] text-slate-500">{c['Canal (Tel/WhatsApp)'] || c['Canal'] || '--'}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${c['Nivel de Interés'] && c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
-                                                        {c['Nivel de Interés'] ? c['Nivel de Interés'].split(' <')[0] : 'N/A'}
-                                                    </span>
+                                            <tr key={i} className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => { setSelectedClient(c); setModal('edit'); }}>
+                                                <td className="px-8 py-5">
+                                                    <p className="font-bold text-slate-700 text-xs">{c.Nombre}</p>
+                                                    <p className="text-[9px] text-slate-300 font-bold uppercase mt-1 tracking-tighter">ID: {c.id_unico}</p>
                                                 </td>
-                                                <td className={`px-6 py-4 text-[10px] font-bold ${(() => {
-                                                        if (!c['Fecha Próx. Contacto']) return 'text-slate-400';
+                                                <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{c.Canal || '--'}</td>
+                                                <td className="px-8 py-5">
+                                                    <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${
+                                                        (c['Nivel de Interés'] || '').includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
+                                                    }`}>{(c['Nivel de Interés'] || '').split(' <')[0] || 'N/A'}</span>
+                                                </td>
+                                                <td className={`px-8 py-5 text-[11px] font-black ${(() => {
+                                                        if (!c['Fecha Próx. Contacto'] || c['Fecha Próx. Contacto'] === '--') return 'text-slate-300';
                                                         const [d, m, y] = c['Fecha Próx. Contacto'].split('/').map(Number);
-                                                        const pDate = new Date(y, m - 1, d); pDate.setHours(0, 0, 0, 0);
-                                                        const mxToday = new Date(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City' }).format(new Date()));
-                                                        mxToday.setHours(0, 0, 0, 0);
-                                                        if (pDate < mxToday) return 'text-red-500';
-                                                        if (pDate.getTime() === mxToday.getTime()) return 'text-orange-500';
-                                                        return 'text-sky-600';
-                                                    })()
-                                                    }`}>{c['Fecha Próx. Contacto'] || '--'}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 rounded-lg border text-[8px] font-bold uppercase tracking-tight ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-100' :
-                                                            c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-100' :
-                                                                c['Estado Final'] === 'Contactar más tarde' ? 'bg-slate-50 text-slate-400 border-slate-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'
-                                                        }`}>{c['Estado Final']}</span>
+                                                        const pDate = new Date(y, m - 1, d);
+                                                        const nowMx = new Date(getMexicoDate() + "T00:00:00");
+                                                        if (pDate < nowMx) return 'text-red-500';
+                                                        if (pDate.getTime() === nowMx.getTime()) return 'text-orange-500';
+                                                        return 'text-sky-500';
+                                                    })()}`}>
+                                                    {c['Fecha Próx. Contacto'] || '--'}
                                                 </td>
-                                                <td className="px-6 py-4 text-right pr-10">
-                                                    <button onClick={() => { setSelectedClient(c); setModal('edit'); }} className="w-9 h-9 rounded-xl bg-white shadow-sm flex items-center justify-center ml-auto hover:bg-sky-50 hover:text-sky-600 transition-all border border-slate-100 outline-none">
-                                                        <i className="fas fa-folder-open text-slate-300 text-sm"></i>
-                                                    </button>
+                                                <td className="px-8 py-5">
+                                                    <span className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${
+                                                        c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                                    }`}>{c['Estado Final']}</span>
+                                                </td>
+                                                <td className="px-8 py-5 text-right pr-12">
+                                                    <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center ml-auto hover:bg-sky-50 hover:text-sky-600 transition-all border border-slate-100">
+                                                        <i className="fas fa-eye text-slate-300 text-sm"></i>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )) : (
-                                            <tr><td colSpan="6" className="py-20 text-center opacity-20 font-black uppercase text-xs tracking-widest">Sin resultados</td></tr>
+                                            <tr><td colSpan="6" className="py-24 text-center opacity-30 font-black uppercase text-xs tracking-[0.4em]">Sin Resultados en la Base Maestro</td></tr>
                                         )}
                                     </tbody>
                                 </table>
                             </div>
 
                             {totalPages > 1 && (
-                                <div className="p-6 flex justify-center items-center gap-2 bg-slate-50/20 border-t border-slate-100">
-                                    <button
-                                        disabled={currentPage === 1}
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-30 transition-all border-none outline-none"
-                                    >
-                                        <i className="fas fa-chevron-left text-xs"></i>
-                                    </button>
-
-                                    {[...Array(totalPages)].map((_, i) => {
-                                        const page = i + 1;
-                                        if (totalPages > 7 && Math.abs(currentPage - page) > 2 && page !== 1 && page !== totalPages) {
-                                            if (Math.abs(currentPage - page) === 3) return <span key={page} className="text-slate-300">...</span>;
-                                            return null;
-                                        }
-                                        return (
-                                            <button
-                                                key={page}
-                                                onClick={() => setCurrentPage(page)}
-                                                className={`w-10 h-10 rounded-xl font-bold text-xs transition-all border-none outline-none ${currentPage === page ? 'text-white shadow-lg' : 'text-slate-400 hover:bg-white'}`}
-                                                style={currentPage === page ? { backgroundColor: activeTheme.primary } : {}}
-                                            >
-                                                {page}
-                                            </button>
-                                        );
-                                    })}
-
-                                    <button
-                                        disabled={currentPage === totalPages}
-                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                        className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-30 transition-all border-none outline-none"
-                                    >
-                                        <i className="fas fa-chevron-right text-xs"></i>
-                                    </button>
+                                <div className="p-8 flex justify-center items-center gap-3 bg-slate-50/30 border-t border-slate-100">
+                                    <button disabled={currentPage === 1} onClick={(e) => {e.stopPropagation(); setCurrentPage(p => p - 1)}} className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-20 transition-all border-none outline-none"><i className="fas fa-chevron-left text-xs"></i></button>
+                                    {[...Array(totalPages)].map((_, i) => (
+                                        <button key={i} onClick={(e) => {e.stopPropagation(); setCurrentPage(i + 1)}} className={`w-12 h-12 rounded-2xl font-black text-xs transition-all border-none outline-none ${currentPage === i + 1 ? 'text-white shadow-xl' : 'text-slate-400 hover:bg-white'}`} style={currentPage === i + 1 ? { backgroundColor: activeTheme.primary } : {}}>{i + 1}</button>
+                                    ))}
+                                    <button disabled={currentPage === totalPages} onClick={(e) => {e.stopPropagation(); setCurrentPage(p => p + 1)}} className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-20 transition-all border-none outline-none"><i className="fas fa-chevron-right text-xs"></i></button>
                                 </div>
                             )}
-                        </div>
-                        <div className="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">
-                            Mostrando {paginatedClients.length} de {filteredClients.length} prospectos • Ordenados por fecha de registro (desc)
                         </div>
                     </main>
 
                     {showHistoryModal && <HistoryModal onClose={() => setShowHistoryModal(false)} />}
-                    {statusAlert && <StatusModal alert={statusAlert} onClose={() => {
-                        const isSuccess = statusAlert.type === 'success';
-                        setStatusAlert(null);
-                        if (isSuccess && user) fetchClients(user);
-                    }} />}
-                    {modal === 'new' && <NewClientModal theme={activeTheme} user={user} onClose={handleCloseModal} onRefresh={() => fetchClients(user)} setStatus={setStatusAlert} onQueueChange={setPendingCount} existingClients={clients} />}
-                    {modal === 'edit' && <EditClientModal theme={activeTheme} client={selectedClient} onClose={handleCloseModal} onRefresh={() => fetchClients(user)} setStatus={setStatusAlert} onQueueChange={setPendingCount} />}
-                </div>
-            );
-        };
-
-        const HistoryModal = ({ onClose }) => {
-            const history = JSON.parse(localStorage.getItem('crm_blackbox_25') || '[]');
-            return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 shadow-2xl border border-white animate-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-black uppercase tracking-tighter">Caja Negra de Seguridad</h3>
-                            <button onClick={onClose} className="text-slate-300 hover:text-red-500 outline-none border-none"><i className="fas fa-times text-xl"></i></button>
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">Respaldo Físico de las últimas 25 gestiones</p>
-                        <div className="space-y-3 max-h-[60vh] overflow-y-auto custom-scroll pr-2">
-                            {history.length === 0 ? <p className="text-center py-10 text-slate-200 font-black uppercase text-[10px]">Vacío</p> :
-                                history.map((h, i) => (
-                                    <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-all">
-                                        <div>
-                                            <p className="text-[11px] font-black text-slate-700 uppercase leading-none mb-1">{h.payload.Nombre || h.payload.nombre_original}</p>
-                                            <p className="text-[8px] font-bold text-slate-400">{h.action} • {new Date(h.timestamp).toLocaleString()}</p>
-                                        </div>
-                                        <button onClick={() => downloadBackup(h.payload, h.payload.Nombre || h.payload.nombre_original, h.action)} className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-sky-500 hover:scale-110 transition-transform"><i className="fas fa-file-download text-sm"></i></button>
-                                    </div>
-                                ))}
-                        </div>
-                        <button onClick={onClose} className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:brightness-110 transition-all">Cerrar</button>
-                    </div>
-                </div>
-            );
-        };
-
-        const StatusModal = ({ alert, onClose }) => {
-            const isError = alert.type === 'error';
-            return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-sm rounded-[3.5rem] p-12 shadow-2xl border border-white text-center animate-in zoom-in duration-200">
-                        <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-white mb-6 shadow-lg ${isError ? 'bg-amber-500' : 'bg-emerald-500'}`}>
-                            <i className={`fas ${isError ? 'fa-satellite-dish' : 'fa-check-double'} text-3xl`}></i>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2">{alert.title}</h3>
-                        <p className="text-slate-400 text-xs font-medium mb-8 leading-relaxed">{alert.message}</p>
-
-                        {!isError && alert.data && (
-                            <button onClick={() => downloadBackup(alert.data, alert.data.Nombre || alert.data.nombre_original || 'Respaldo', 'CONFIRMADO')} className="w-full py-4 mb-3 bg-sky-50 text-sky-600 border border-sky-100 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2">
-                                <i className="fas fa-download"></i> Descargar Respaldo JSON
-                            </button>
-                        )}
-                        <button onClick={onClose} className="w-full py-4 bg-slate-100 text-slate-800 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all outline-none border-none">Entendido</button>
-                    </div>
-                </div>
-            );
-        };
-
-        const LoginScreen = ({ agents, onLogin, loading, theme }) => {
-            const [selected, setSelected] = useState('');
-            const [pass, setPass] = useState('');
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-200 p-6">
-                    <div className="max-w-md w-full glass p-12 rounded-[3.5rem] shadow-2xl text-center border border-white animate-in zoom-in duration-500">
-                        <div className="w-20 h-20 mx-auto rounded-[2.5rem] flex items-center justify-center text-white mb-8 shadow-2xl" style={{ backgroundColor: theme.primary }}><i className="fas fa-fingerprint text-4xl"></i></div>
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tighter uppercase mb-10 leading-none">Ingreso<br />Plataforma</h2>
-                        <div className="space-y-5 text-left">
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre de Asesora</label>
-                                <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={selected} onChange={e => setSelected(e.target.value)}>
-                                    <option value="">Seleccionar...</option>
-                                    {agents.map(a => <option key={a} value={a}>{a}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Clave de Acceso</label>
-                                <input type="password" placeholder="••••••••" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} />
-                            </div>
-                            <button onClick={() => onLogin(selected, pass)} disabled={loading || !selected || !pass} className="w-full py-5 rounded-2xl text-white font-black text-base shadow-2xl transition-all hover:brightness-110 active:scale-95 uppercase tracking-tighter" style={{ backgroundColor: theme.primary }}>{loading ? 'AUTENTICANDO...' : 'ENTRAR AL CRM'}</button>
-                        </div>
-                    </div>
+                    {statusAlert && <StatusModal alert={statusAlert} onClose={() => { setStatusAlert(null); if (statusAlert.type === 'success' && user) fetchClients(user); }} />}
+                    
+                    {modal === 'new' && <NewClientModal 
+                        theme={activeTheme} 
+                        user={user} 
+                        onClose={() => setModal(null)} 
+                        onRefresh={() => fetchClients(user)} 
+                        setStatus={setStatusAlert} 
+                        onQueueChange={setPendingCount} 
+                        existingClients={clients} 
+                    />}
+                    
+                    {modal === 'edit' && <EditClientModal 
+                        theme={activeTheme} 
+                        client={selectedClient} 
+                        onClose={() => { setModal(null); setSelectedClient(null); }} 
+                        onRefresh={() => fetchClients(user)} 
+                        setStatus={setStatusAlert} 
+                        onQueueChange={setPendingCount} 
+                    />}
                 </div>
             );
         };
@@ -634,37 +463,45 @@
             });
             const [files, setFiles] = useState([]);
             const [sending, setSending] = useState(false);
-            const [isFromBackup, setIsFromBackup] = useState(false);
 
-            const duplicateFound = useMemo(() => {
-                if (form.Canal.length < 10) return null;
-                return existingClients.find(c => {
-                    const cleanC = (c['Canal (Tel/WhatsApp)'] || c['Canal'] || '').toString().replace(/\D/g, '');
-                    const cleanForm = form.Canal.replace(/\D/g, '');
-                    return cleanC === cleanForm;
-                });
+            const duplicate = useMemo(() => {
+                const cleanInput = form.Canal.replace(/\D/g, '').slice(-10);
+                if (cleanInput.length < 10) return null;
+                return existingClients.find(c => (c.Canal || '').toString().replace(/\D/g, '').slice(-10) === cleanInput);
             }, [form.Canal, existingClients]);
 
-            useEffect(() => {
-                if (window._importedBackup && !window._importedBackup.nombre_original) {
-                    setForm(prev => ({ ...prev, ...window._importedBackup }));
-                    setIsFromBackup(true);
-                    window._importedBackup = null;
-                }
-            }, []);
+            const handleFiles = async (e) => {
+                const selected = Array.from(e.target.files);
+                const results = await Promise.all(selected.map(file => new Promise(resolve => {
+                    const r = new FileReader();
+                    r.onloadend = () => resolve({ base64Data: r.result.split(',')[1], contentType: file.type, name: file.name });
+                    r.readAsDataURL(file);
+                })));
+                setFiles(prev => [...prev, ...results]);
+            };
 
             const save = async (e) => {
-                if (e) e.preventDefault();
-                if (form.Canal.length !== 10) return setStatus({ type: 'error', title: 'Dato Inválido', message: "El teléfono debe tener 10 dígitos." });
-                if (sending) return;
+                if(e) e.preventDefault();
+                const cleanPhone = form.Canal.replace(/\D/g, '').slice(-10);
+                if (cleanPhone.length !== 10) return setStatus({ type: 'error', title: 'Error', message: "El teléfono debe ser de 10 dígitos." });
                 setSending(true);
 
                 const syncId = generateSyncId();
-                const payload = { ...form, sync_id: syncId, files_payload: files, etapa: 'nuevo' };
-
-                addToBlackBox('REGISTRO_NUEVO', payload);
-                if (!isFromBackup) downloadBackup(payload, payload.Nombre, 'NUEVO');
-
+                const payload = { 
+                    id_unico: `ID_${cleanPhone}`,
+                    Nombre: form.Nombre,
+                    Canal: cleanPhone,
+                    'Fecha 1er Contacto': form['Fecha 1er Contacto'],
+                    'Nivel de Interés': form['Nivel de Interés'],
+                    'Resumen Conversación': form['Resumen Conversación'],
+                    'Fecha Próx. Contacto': form['Fecha Próx. Contacto'],
+                    'Estado Final': form['Estado Final'],
+                    Asesora: form.Asesora,
+                    sync_id: syncId, 
+                    files_payload: files, 
+                    etapa: 'nuevo' 
+                };
+                
                 const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
                 queue.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/add-client', payload });
                 localStorage.setItem('crm_sync_queue', JSON.stringify(queue));
@@ -672,79 +509,64 @@
 
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/add-client', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                     const data = await res.json();
-                    if (data.status === 'success' || (data.message && data.message.includes('ya existe'))) {
-                        const currentQueue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
-                        const filtered = currentQueue.filter(q => q.syncId !== syncId);
-                        localStorage.setItem('crm_sync_queue', JSON.stringify(filtered));
-                        onQueueChange(filtered.length);
-                        setStatus({ type: 'success', title: 'Sincronizado', message: "Registro guardado exitosamente.", data: form });
+                    if (data.status === 'success' || data.message?.includes('ya existe')) {
+                        const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]').filter(x => x.syncId !== syncId);
+                        localStorage.setItem('crm_sync_queue', JSON.stringify(q));
+                        onQueueChange(q.length);
+                        setStatus({ type: 'success', title: 'Éxito', message: "Expediente guardado en Base Local.", data: form });
                         onRefresh(); onClose();
-                    } else { throw new Error(data.message); }
+                    }
                 } catch (err) {
-                    setStatus({ type: 'error', title: 'Modo Diferido', message: "Sin conexión. Los datos están protegidos y subirán pronto.", data: form });
+                    setStatus({ type: 'error', title: 'Modo Offline', message: "Guardado en cola de sincronización.", data: form });
                     onClose();
                 }
                 setSending(false);
             };
 
-            // --- AJUSTE QUIRÚRGICO DE ARCHIVOS CON COMPRESIÓN ---
-            const handleFiles = async (e) => {
-                const selectedFiles = Array.from(e.target.files);
-                const payloads = [];
-                for (const file of selectedFiles) {
-                    const compressed = await compressImage(file);
-                    payloads.push(compressed);
-                }
-                setFiles(prev => [...prev, ...payloads]);
-            };
-
             return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50/20">
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase leading-none">Nueva Entrada</h3>
-                            <button type="button" onClick={onClose} className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-slate-300 hover:text-red-500 transition-all outline-none border-none"><i className="fas fa-times text-sm"></i></button>
+                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-2xl rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+                        <div className="p-10 border-b border-slate-100 flex justify-between items-center">
+                            <h3 className="text-2xl font-black text-slate-800 tracking-tighter uppercase">Nuevo Prospecto</h3>
+                            <button onClick={onClose} className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 hover:text-red-500 border-none transition-all outline-none cursor-pointer"><i className="fas fa-times text-lg"></i></button>
                         </div>
-                        <form onSubmit={save} className="p-10 space-y-5 max-h-[75vh] overflow-y-auto custom-scroll">
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nombre del Prospecto</label>
-                                <input required type="text" placeholder="Nombre completo" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner outline-none" value={form.Nombre} onChange={e => setForm({ ...form, Nombre: e.target.value })} />
+                        <form onSubmit={save} className="p-10 space-y-6 max-h-[70vh] overflow-y-auto custom-scroll">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nombre Completo</label>
+                                <input required type="text" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner outline-none" value={form.Nombre} onChange={e => setForm({...form, Nombre: e.target.value})} />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4 flex justify-between">
-                                        WhatsApp {duplicateFound && <span className="text-red-500 animate-pulse font-black">⚠️ DUPLICADO</span>}
-                                    </label>
-                                    <input required type="text" placeholder="10 dígitos" className={`w-full p-4 rounded-2xl font-bold text-sm border-none shadow-inner outline-none transition-all ${duplicateFound ? 'bg-red-50 ring-2 ring-red-100 warning-shake text-red-600' : 'bg-slate-50'}`} value={form.Canal} onChange={e => setForm({ ...form, Canal: e.target.value.replace(/\D/g, '').slice(0, 10) })} />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 flex justify-between">WhatsApp (10 Dígitos) {duplicate && <span className="text-red-500 font-black animate-pulse">⚠️ YA EXISTE</span>}</label>
+                                    <input required type="text" className={`w-full p-5 rounded-2xl font-bold text-sm border-none shadow-inner outline-none ${duplicate ? 'bg-red-50 text-red-600 warning-shake ring-1 ring-red-200' : 'bg-slate-50'}`} value={form.Canal} onChange={e => setForm({...form, Canal: e.target.value.replace(/\D/g, '').slice(0,10)})} />
                                 </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Estado Inicial</label>
-                                    <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Estado Final']} onChange={e => setForm({ ...form, 'Estado Final': e.target.value })}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Estado</label>
+                                    <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Estado Final']} onChange={e => setForm({...form, 'Estado Final': e.target.value})}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
                                 </div>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Nivel de Interés</label>
-                                <select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Nivel de Interés']} onChange={e => setForm({ ...form, 'Nivel de Interés': e.target.value })}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nivel de Interés</label>
+                                <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Nivel de Interés']} onChange={e => setForm({...form, 'Nivel de Interés': e.target.value})}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
                             </div>
-                            <div className="grid grid-cols-2 gap-5">
-                                <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Fecha Registro</label><input required disabled type="date" value={toInputDate(form['Fecha 1er Contacto'])} className="w-full p-4 bg-slate-100 rounded-2xl font-bold text-sm border-none shadow-inner outline-none opacity-50" /></div>
-                                <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Próxima Cita</label><input required type="date" value={toInputDate(form['Fecha Próx. Contacto'])} className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner outline-none" onChange={e => setForm({ ...form, 'Fecha Próx. Contacto': toSheetDate(e.target.value) })} /></div>
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">1er Contacto</label><input disabled type="text" value={form['Fecha 1er Contacto']} className="w-full p-5 bg-slate-100/50 rounded-2xl font-bold text-sm border-none opacity-50" /></div>
+                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Próxima Cita</label><input required type="date" value={toInputDate(form['Fecha Próx. Contacto'])} className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner" onChange={e => setForm({...form, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} /></div>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-4">Resumen de Apertura</label>
-                                <textarea required placeholder="¿Cómo inició el contacto?..." className="w-full p-6 bg-slate-50 rounded-[2rem] font-medium text-sm h-28 border-none shadow-inner outline-none" value={form['Resumen Conversación']} onChange={e => setForm({ ...form, 'Resumen Conversación': e.target.value })}></textarea>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Resumen Conversación</label>
+                                <textarea required className="w-full p-8 bg-slate-50 rounded-[2.5rem] font-medium text-sm h-32 border-none shadow-inner outline-none" placeholder="Contexto de la primera charla..." value={form['Resumen Conversación']} onChange={e => setForm({...form, 'Resumen Conversación': e.target.value})}></textarea>
                             </div>
-                            <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-center relative cursor-pointer hover:bg-slate-50 group transition-all">
-                                <input multiple type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
-                                <i className="fas fa-camera text-4xl text-slate-200 mb-2 group-hover:text-sky-300 transition-colors"></i>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{files.length > 0 ? `✓ ${files.length} CARGADAS (Shield v5.6)` : 'CAPTURAR EVIDENCIAS'}</p>
+                            <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-center relative cursor-pointer hover:bg-slate-50 transition-all">
+                                <input multiple type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
+                                <i className="fas fa-images text-4xl text-slate-200 mb-2"></i>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{files.length > 0 ? `✓ ${files.length} EVIDENCIAS LISTAS` : 'AÑADIR CAPTURAS'}</p>
                             </div>
-                            <button type="submit" disabled={sending} className="w-full py-5 rounded-2xl text-white font-black text-base shadow-2xl transition-all border-none outline-none uppercase tracking-tighter" style={{ backgroundColor: theme.primary }}>{sending ? 'SINCRONIZANDO...' : duplicateFound ? 'GUARDAR DUPLICADO' : 'CREAR EXPEDIENTE'}</button>
+                            <button type="submit" disabled={sending} className="w-full py-6 rounded-3xl text-white font-black text-base shadow-2xl transition-all border-none uppercase tracking-widest" style={{ backgroundColor: theme.primary }}>{sending ? 'CARGANDO...' : 'REGISTRAR PROSPECTO'}</button>
                         </form>
                     </div>
                 </div>
@@ -753,149 +575,217 @@
 
         const EditClientModal = ({ theme, client, onClose, onRefresh, setStatus, onQueueChange }) => {
             const [tab, setTab] = useState('base');
-            const [sending, setSending] = useState(false);
-            const [local, setLocal] = useState({ ...client });
+            const [localForm, setLocalForm] = useState({ ...client });
             const [newPhotos, setNewPhotos] = useState([]);
-            const [isFromBackup, setIsFromBackup] = useState(false);
-
+            const [sending, setSending] = useState(false);
             const isLocked = client['Estado Final'] === 'Venta' || client['Estado Final'] === 'No interesado';
+            
             const completedList = useMemo(() => {
-                let list = []; for (let i = 1; i <= 30; i++) { if (client[`Fecha Seguimiento ${i}`]) list.push({ n: i, fecha: client[`Fecha Seguimiento ${i}`], nota: client[`Notas Seguimiento ${i}`] }); } return list;
+                let list = []; 
+                for (let i = 1; i <= 30; i++) { 
+                    const fKey = `Fecha Seguimiento ${i}`;
+                    const nKey = `Notas Seguimiento ${i}`;
+                    if (client[fKey]) list.push({ n: i, fecha: client[fKey], nota: client[nKey] });
+                } 
+                return list;
             }, [client]);
-            const nextFollowUp = completedList.length > 0 ? completedList[completedList.length - 1].n + 1 : 1;
 
+            const nextIdx = useMemo(() => {
+                for (let i = 1; i <= 30; i++) { if (!client[`Fecha Seguimiento ${i}`]) return i; }
+                return 31;
+            }, [client]);
+
+            // EFECTO DE TRAZABILIDAD: Pre-llenado de fecha únicamente
             useEffect(() => {
-                if (window._importedBackup && window._importedBackup.nombre_original === client.Nombre) {
-                    setLocal(prev => ({ ...prev, ...window._importedBackup.updates }));
-                    setIsFromBackup(true);
-                    setTab('new'); window._importedBackup = null;
+                if (tab === 'new' && nextIdx <= 30 && (!localForm[`Notas Seguimiento ${nextIdx}`] || localForm[`Notas Seguimiento ${nextIdx}`] === '')) {
+                    setLocalForm(prev => ({ 
+                        ...prev, 
+                        [`Fecha Seguimiento ${nextIdx}`]: toSheetDate(getMexicoDate()),
+                        [`Notas Seguimiento ${nextIdx}`]: '' 
+                    }));
                 }
-                if (tab === 'new') setLocal(prev => ({ ...prev, [`Fecha Seguimiento ${nextFollowUp}`]: toSheetDate(getMexicoDate()) }));
-            }, [tab, nextFollowUp, client.Nombre]);
+            }, [tab, nextIdx]);
 
-            // --- AJUSTE QUIRÚRGICO DE ARCHIVOS CON COMPRESIÓN (UPDATE) ---
             const handleFiles = async (e) => {
-                const selectedFiles = Array.from(e.target.files);
-                const payloads = [];
-                for (const file of selectedFiles) {
-                    const compressed = await compressImage(file);
-                    payloads.push(compressed);
-                }
-                setNewPhotos(prev => [...prev, ...payloads]);
+                const selected = Array.from(e.target.files);
+                const results = await Promise.all(selected.map(file => new Promise(resolve => {
+                    const r = new FileReader();
+                    r.onloadend = () => resolve({ base64Data: r.result.split(',')[1], contentType: file.type, name: file.name });
+                    r.readAsDataURL(file);
+                })));
+                setNewPhotos(prev => [...prev, ...results]);
             };
 
             const update = async (e) => {
-                if (e) e.preventDefault();
-                if (sending) return;
+                if(e) e.preventDefault();
                 setSending(true);
-
                 const syncId = generateSyncId();
-                const updates = { 'Estado Final': local['Estado Final'], 'Nivel de Interés': local['Nivel de Interés'], 'Fecha Próx. Contacto': local['Fecha Próx. Contacto'], 'Comentarios': local['Comentarios'] };
-                if (tab === 'new') {
-                    const n = nextFollowUp;
-                    updates[`Fecha Seguimiento ${n}`] = local[`Fecha Seguimiento ${n}`];
-                    updates[`Notas Seguimiento ${n}`] = `Anterior: ${client['Fecha Próx. Contacto'] || 'N/A'}\n${local[`Notas Seguimiento ${n}`] || ''}`;
+                const updates = { 
+                    'Estado Final': localForm['Estado Final'], 
+                    'Nivel de Interés': localForm['Nivel de Interés'], 
+                    'Fecha Próx. Contacto': localForm['Fecha Próx. Contacto'], 
+                    'Comentarios': localForm['Comentarios'] 
+                };
+                if (tab === 'new' && nextIdx <= 30) {
+                    updates[`Fecha Seguimiento ${nextIdx}`] = localForm[`Fecha Seguimiento ${nextIdx}`];
+                    updates[`Notas Seguimiento ${nextIdx}`] = localForm[`Notas Seguimiento ${nextIdx}`];
                 }
-
-                const finalPayload = { nombre_original: client.Nombre, updates, client_reference: client, sync_id: syncId, files_payload: newPhotos, etapa: 'seguimiento' };
-
-                addToBlackBox('SEGUIMIENTO', finalPayload);
-                if (!isFromBackup) downloadBackup(finalPayload, finalPayload.nombre_original, `SEGUIMIENTO_${nextFollowUp}`);
-
-                const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
-                queue.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', payload: finalPayload });
-                localStorage.setItem('crm_sync_queue', JSON.stringify(queue));
-                onQueueChange(queue.length);
+                const payload = { nombre_original: client.Nombre, updates, sync_id: syncId, files_payload: newPhotos, etapa: 'seguimiento' };
+                const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
+                q.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', payload });
+                localStorage.setItem('crm_sync_queue', JSON.stringify(q));
+                onQueueChange(q.length);
 
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(finalPayload)
+                        body: JSON.stringify(payload)
                     });
                     const data = await res.json();
-                    if (data.status === 'success' || (data.message && data.message.includes('ya existe'))) {
-                        const currentQueue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
-                        const filtered = currentQueue.filter(q => q.syncId !== syncId);
-                        localStorage.setItem('crm_sync_queue', JSON.stringify(filtered));
-                        onQueueChange(filtered.length);
-                        setStatus({ type: 'success', title: 'Sincronizado', message: "Expediente actualizado exitosamente.", data: local });
+                    if (data.status === 'success') {
+                        const currentQ = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]').filter(x => x.syncId !== syncId);
+                        localStorage.setItem('crm_sync_queue', JSON.stringify(currentQ));
+                        onQueueChange(currentQ.length);
+                        setStatus({ type: 'success', title: 'Actualización OK', message: "Expediente actualizado en servidor local.", data: localForm });
                         onRefresh(); onClose();
-                    } else { throw new Error(data.message); }
+                    }
                 } catch (err) {
-                    setStatus({ type: 'error', title: 'Guardado Local', message: "Modo Offline activo. El blindaje subirá los cambios pronto.", data: local });
+                    setStatus({ type: 'error', title: 'Modo Local', message: "Expediente guardado en cola para sincronizar.", data: localForm });
                     onClose();
                 }
                 setSending(false);
             };
 
             return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-4xl rounded-[3.5rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-10 flex justify-between items-center bg-white border-b border-slate-50">
-                            <div><h3 className="text-xl font-black text-slate-800 tracking-tight leading-none mb-1">{client.Nombre}</h3><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Auditoría de Expediente • v5.6</p></div>
-                            <div className="flex gap-3">
-                                {client.Imagenes && <a href={client.Imagenes} target="_blank" className="text-sky-600 font-bold text-[10px] bg-sky-50 px-5 py-3.5 rounded-2xl hover:bg-sky-100 flex items-center gap-2"><i className="fab fa-google-drive"></i> EXPEDIENTE</a>}
-                                <button type="button" onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-all border-none outline-none"><i className="fas fa-times text-sm"></i></button>
+                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-4xl rounded-[4rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden animate-in zoom-in duration-300">
+                        <div className="p-10 flex justify-between items-center border-b border-slate-50">
+                            <div><h3 className="text-2xl font-black text-slate-800 tracking-tighter uppercase leading-none">{client.Nombre}</h3><p className="text-[10px] font-black text-slate-300 mt-1 uppercase tracking-widest">ID: {client.id_unico}</p></div>
+                            <div className="flex gap-4">
+                                {client.Imagenes && <a href={client.Imagenes} target="_blank" className="text-sky-600 font-bold text-[10px] bg-sky-50 px-6 py-4 rounded-2xl hover:bg-sky-100 flex items-center gap-2 transition-colors cursor-pointer"><i className="fab fa-google-drive"></i> VER DRIVE</a>}
+                                <button onClick={onClose} className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 hover:text-red-500 border-none transition-all outline-none cursor-pointer"><i className="fas fa-times text-lg"></i></button>
                             </div>
                         </div>
                         <div className="chrome-tab-container">
                             {['base', 'history', 'new', 'notes'].map(t => {
-                                if (t === 'new' && isLocked) return null;
-                                const icons = { base: 'fa-id-badge', history: 'fa-history', new: 'fa-edit', notes: 'fa-sticky-note' };
-                                const labels = { base: 'Ficha', history: 'Historial', new: 'Nueva Gestión', notes: 'Notas' };
-                                return <button key={t} type="button" onClick={() => setTab(t)} className={`chrome-tab ${tab === t ? 'chrome-tab-active' : ''}`} style={tab === t ? { color: theme.primary } : {}}><i className={`fas ${icons[t]} text-xs`}></i> {labels[t]}</button>
+                                if (t === 'new' && (isLocked || nextIdx > 30)) return null;
+                                const icons = { base: 'fa-id-card', history: 'fa-history', new: 'fa-edit', notes: 'fa-sticky-note' };
+                                const labels = { base: 'Expediente', history: 'Gestiones', new: 'Nuevo Seguimiento', notes: 'Auditoría' };
+                                return <button key={t} onClick={() => setTab(t)} className={`chrome-tab ${tab === t ? 'chrome-tab-active' : ''}`} style={tab === t ? { color: theme.primary } : {}}><i className={`fas ${icons[t]}`}></i> {labels[t]}</button>
                             })}
                         </div>
-                        <div className="flex-1 p-10 overflow-y-auto custom-scroll bg-white">
-                            {tab === 'base' && <div className="space-y-8 animate-in fade-in duration-300">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                    <div className="space-y-1.5"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Registro</p><div className="read-only-box">{client['Fecha 1er Contacto']}</div></div>
-                                    <div className="space-y-1.5"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Teléfono</p><div className="read-only-box">{client['Canal (Tel/WhatsApp)'] || client['Canal']}</div></div>
-                                    <div className="space-y-1.5"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Asesora</p><div className="read-only-box">{client['Asesora']}</div></div>
-                                    <div className="space-y-1.5"><p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Próx. Cita</p><div className="read-only-box text-sky-600 border-sky-100 font-bold">{client['Fecha Próx. Contacto'] || '--'}</div></div>
+                        <div className="flex-1 p-12 overflow-y-auto custom-scroll bg-white">
+                            {tab === 'base' && <div className="space-y-10 animate-in fade-in duration-300">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                                    <div className="space-y-1"><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">Registro</p><div className="p-3 bg-slate-50 rounded-xl font-bold text-slate-500 text-xs">{client['Fecha 1er Contacto']}</div></div>
+                                    <div className="space-y-1"><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">WhatsApp</p><div className="p-3 bg-slate-50 rounded-xl font-bold text-slate-500 text-xs">{client.Canal}</div></div>
+                                    <div className="space-y-1"><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">Asesora</p><div className="p-3 bg-slate-50 rounded-xl font-bold text-slate-500 text-xs">{client['Asesora']}</div></div>
+                                    <div className="space-y-1"><p className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">Próxima Cita</p><div className="p-3 bg-slate-50 rounded-xl font-bold text-sky-600 text-xs">{client['Fecha Próx. Contacto'] || '--'}</div></div>
                                 </div>
-                                <div className="space-y-2">
-                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-1">Resumen de Apertura</p>
-                                    <div className="p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-medium text-slate-600 italic leading-relaxed text-xs">"{client['Resumen Conversación']}"</div>
+                                <div className="space-y-3">
+                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest ml-1">Resumen Inicial</p>
+                                    <div className="p-10 bg-slate-50 border border-slate-100 rounded-[3rem] font-medium text-slate-600 italic leading-relaxed text-sm">"{client['Resumen Conversación']}"</div>
                                 </div>
                             </div>}
-                            {tab === 'history' && <div className="space-y-6 max-w-4xl animate-in fade-in duration-300">{completedList.map((item, idx) => (
-                                <div key={idx} className="relative pl-10 border-l-2 border-slate-100 pb-8">
-                                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-4 border-white shadow-sm" style={{ backgroundColor: theme.primary }}></div>
-                                    <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.primary }}>Gestión #{item.n}</span>
-                                            <span className="text-[9px] font-bold text-slate-300 italic">{item.fecha}</span>
+                            {tab === 'history' && <div className="space-y-8 animate-in fade-in duration-300">
+                                {completedList.length === 0 ? <p className="text-center py-20 text-slate-200 font-black uppercase text-xs tracking-widest">Sin historial previo</p> : 
+                                completedList.map((h, i) => (
+                                    <div key={i} className="relative pl-12 border-l-2 border-slate-100 pb-10 last:pb-0">
+                                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-4 border-white shadow-md" style={{ backgroundColor: theme.primary }}></div>
+                                        <div className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: theme.primary }}>Seguimiento #{h.n}</span>
+                                                <span className="text-[10px] font-bold text-slate-300 italic">{h.fecha}</span>
+                                            </div>
+                                            <p className="text-sm text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{h.nota}</p>
                                         </div>
-                                        <p className="text-xs text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{item.nota}</p>
                                     </div>
+                                ))}
+                            </div>}
+                            {tab === 'new' && <div className="space-y-8 animate-in fade-in duration-300">
+                                <div className="grid grid-cols-2 gap-8">
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Fecha</label><input disabled type="text" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-bold opacity-50 text-xs" value={localForm[`Fecha Seguimiento ${nextIdx}`] || ''} /></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Próx. Contacto</label><input type="date" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs shadow-inner border-none outline-none" value={toInputDate(localForm['Fecha Próx. Contacto'])} onChange={e => setLocalForm({...localForm, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} /></div>
                                 </div>
-                            ))}</div>}
-                            {tab === 'new' && <div className="space-y-6 max-w-3xl animate-in fade-in duration-300">
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-300 uppercase ml-4">Fecha Gestión</label><input type="date" disabled className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold opacity-50 text-xs" value={toInputDate(local[`Fecha Seguimiento ${nextFollowUp}`])} /></div>
-                                    <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-300 uppercase ml-4">Próxima Cita</label><input type="date" className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs shadow-inner border-none outline-none" value={toInputDate(local['Fecha Próx. Contacto'])} onChange={e => setLocal({ ...local, 'Fecha Próx. Contacto': toSheetDate(e.target.value) })} /></div>
+                                <div className="grid grid-cols-2 gap-8">
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nivel de Interés</label><select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={localForm['Nivel de Interés']} onChange={e => setLocalForm({...localForm, 'Nivel de Interés': e.target.value})}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Estado Actual</label><select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={localForm['Estado Final']} onChange={e => setLocalForm({...localForm, 'Estado Final': e.target.value})}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-300 uppercase ml-4">Nivel Interés</label><select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={local['Nivel de Interés']} onChange={e => setLocal({ ...local, 'Nivel de Interés': e.target.value })}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                                    <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-300 uppercase ml-4">Estado Final</label><select className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={local['Estado Final']} onChange={e => setLocal({ ...local, 'Estado Final': e.target.value })}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Relato de Gestión #{nextIdx}</label>
+                                    <textarea className="w-full p-10 bg-slate-50 rounded-[3rem] font-medium text-sm h-40 border-none shadow-inner outline-none" placeholder="Añade las notas de esta gestión..." value={localForm[`Notas Seguimiento ${nextIdx}`] || ''} onChange={e => setLocalForm({...localForm, [`Notas Seguimiento ${nextIdx}`]: e.target.value})}></textarea>
                                 </div>
-                                <textarea className="w-full p-8 bg-slate-50 rounded-[2.5rem] font-medium text-xs h-32 border-none shadow-inner outline-none" placeholder="Bitácora de la llamada o contacto..." value={local[`Notas Seguimiento ${nextFollowUp}`] || ''} onChange={e => setLocal({ ...local, [`Notas Seguimiento ${nextFollowUp}`]: e.target.value })}></textarea>
-                                <div className="p-8 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-center relative cursor-pointer hover:bg-slate-50 group transition-all">
-                                    <input multiple type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
-                                    <i className="fas fa-camera text-3xl text-slate-200 mb-2 group-hover:text-sky-300 transition-colors"></i>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{newPhotos.length > 0 ? `✓ ${newPhotos.length} EVIDENCIAS LISTAS` : 'ADJUNTAR CAPTURAS DE GESTIÓN'}</p>
+                                <div className="p-10 border-2 border-dashed border-slate-200 rounded-[3rem] text-center relative cursor-pointer hover:bg-slate-50 transition-all">
+                                    <input multiple type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
+                                    <i className="fas fa-camera text-4xl text-slate-200 mb-2"></i>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{newPhotos.length > 0 ? `✓ ${newPhotos.length} EVIDENCIAS LISTAS` : 'AÑADIR CAPTURAS'}</p>
                                 </div>
                             </div>}
                             {tab === 'notes' && <div className="space-y-4 h-full animate-in fade-in duration-300">
-                                <label className="text-[9px] font-black text-slate-300 uppercase tracking-widest ml-4">Anotaciones Adicionales</label>
-                                <textarea className="w-full p-10 bg-slate-50 rounded-[3rem] font-medium text-xs h-full border-none shadow-inner outline-none" placeholder="Escribe aquí observaciones permanentes..." value={local['Comentarios'] || ''} onChange={e => setLocal({ ...local, 'Comentarios': e.target.value })}></textarea>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Anotaciones de Auditoría</label>
+                                <textarea className="w-full p-12 bg-slate-50 rounded-[4rem] font-medium text-sm h-full border-none shadow-inner outline-none" placeholder="Notas internas..." value={localForm['Comentarios'] || ''} onChange={e => setLocalForm({...localForm, 'Comentarios': e.target.value})}></textarea>
                             </div>}
                         </div>
-                        <div className="p-10 bg-slate-50/30 border-t border-slate-50 flex gap-5">
-                            <button type="button" onClick={onClose} className="flex-1 py-4 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all border-none outline-none">Descartar</button>
-                            {(!isLocked && tab !== 'base') && <button type="button" onClick={update} disabled={sending} className="flex-[2] py-4 rounded-2xl text-white font-black text-base shadow-2xl hover:brightness-110 uppercase tracking-tighter transition-all border-none outline-none" style={{ backgroundColor: theme.primary }}>{sending ? 'SINCRONIZANDO...' : 'Sincronizar Handshake'}</button>}
+                        <div className="p-10 bg-slate-50/30 border-t border-slate-50 flex gap-6">
+                            <button onClick={onClose} className="flex-1 py-5 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all border-none outline-none cursor-pointer">Cerrar</button>
+                            {(!isLocked && tab !== 'base') && <button onClick={update} disabled={sending} className="flex-[2] py-5 rounded-3xl text-white font-black text-base shadow-2xl hover:brightness-110 uppercase tracking-widest transition-all border-none outline-none cursor-pointer" style={{ backgroundColor: theme.primary }}>{sending ? 'SINCRONIZANDO...' : 'Sincronizar Gestión'}</button>}
                         </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const StatusModal = ({ alert, onClose }) => {
+            const isError = alert.type === 'error';
+            return (
+                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[120] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-sm rounded-[4rem] p-12 shadow-2xl border border-white text-center animate-in zoom-in duration-300">
+                        <div className={`w-24 h-24 mx-auto rounded-[2.5rem] flex items-center justify-center text-white mb-8 shadow-xl ${isError ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                            <i className={`fas ${isError ? 'fa-exclamation-triangle' : 'fa-check-double'} text-4xl`}></i>
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter mb-4">{alert.title}</h3>
+                        <p className="text-slate-400 text-xs font-medium mb-10 leading-relaxed">{alert.message}</p>
+                        <button onClick={onClose} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-800 transition-all outline-none border-none cursor-pointer">OK</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const HistoryModal = ({ onClose }) => {
+            const [queue, setQueue] = useState([]);
+            useEffect(() => {
+                const fetchQueue = async () => {
+                    try {
+                        const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/sync-queue');
+                        const data = await res.json();
+                        setQueue(data);
+                    } catch (e) { 
+                        const local = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
+                        setQueue(local.map(x => ({ sync_id: x.syncId, action: 'Local', timestamp: 'Pendiente' })));
+                    }
+                };
+                fetchQueue();
+            }, []);
+            return (
+                <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-lg rounded-[4rem] p-12 shadow-2xl border border-white animate-in zoom-in">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-800">Cola de Sincronización</h3>
+                            <button onClick={onClose} className="text-slate-300 hover:text-red-500 outline-none border-none cursor-pointer"><i className="fas fa-times text-2xl"></i></button>
+                        </div>
+                        <div className="space-y-4 max-h-[50vh] overflow-y-auto custom-scroll pr-2">
+                            {queue.length === 0 ? <p className="text-center py-20 text-slate-300 font-black uppercase text-[10px]">Sin tareas pendientes</p> :
+                                queue.map((h, i) => (
+                                    <div key={i} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="flex-1 overflow-hidden">
+                                            <p className="text-[11px] font-black text-slate-700 uppercase mb-1 truncate">{h.sync_id || 'ID_SYNC'}</p>
+                                            <p className="text-[9px] font-bold text-slate-400">{h.action} • {h.timestamp}</p>
+                                        </div>
+                                        <i className="fas fa-circle-notch animate-spin text-amber-500 ml-4"></i>
+                                    </div>
+                                ))}
+                        </div>
+                        <button onClick={onClose} className="w-full mt-10 py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest cursor-pointer">Cerrar</button>
                     </div>
                 </div>
             );
