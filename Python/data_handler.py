@@ -17,9 +17,10 @@ logger = logging.getLogger("DataHandler")
 
 class DataHandler:
     """
-    Versión 10.11: Restauración de Prefijos de Imagen y Mapeo PascalCase para UI.
-    - _upload_to_google: Recupera prefijos dinámicos (registro/seguimientoN) para Drive.
-    - _map_db_to_ui: Asegura que 'asesora' se entregue como 'Asesora' para el CRM.
+    Versión 10.12: Corrección Quirúrgica de Mapeo ADD, Nombres de Evidencia y Visualización UI.
+    - Restaura prefijos dinámicos de imágenes (registro/seguimientoN).
+    - Mapeo completo de campos en el registro inicial (ADD).
+    - Traductor de salida para asegurar que 'asesora' se vea como 'Asesora' en el CRM.
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
@@ -228,6 +229,7 @@ class DataHandler:
         canal_raw = str(data.get('Canal') or data.get('canal_original') or '')
         canal = "".join(filter(str.isdigit, canal_raw))[-10:]
         id_unico = f"ID_{canal}" if canal else None
+        nombre_ref = data.get('nombre_original') or data.get('Nombre')
         
         # Lógica de Rendimiento
         rendimiento = "AL DIA"
@@ -240,9 +242,11 @@ class DataHandler:
         data['Rendimiento'] = rendimiento
 
         try:
+            self._write_to_journal(action_type, data, "RECEIVED")
             conn = self._get_conn()
             cursor = conn.cursor()
             if action_type == "ADD":
+                # REGISTRO COMPLETO: id_unico, validacion, nombre, canal, fecha_registro, nivel_interes, resumen, rendimiento, fecha_proxima, estado_final, comentarios, asesora (12 campos)
                 cursor.execute('''
                     INSERT OR REPLACE INTO prospectos (id_unico, validacion, nombre, canal, fecha_registro, nivel_interes, resumen, rendimiento, fecha_proxima, estado_final, comentarios, asesora)
                     VALUES (?, 'PENDIENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -267,9 +271,10 @@ class DataHandler:
                         sql_parts.append(f"notas_seguimiento_{i} = ?")
                         params.append(updates[f'Notas Seguimiento {i}'])
 
-                ref = id_unico if id_unico else data.get('nombre_original')
+                ref = id_unico if id_unico else nombre_ref
                 params.append(ref)
-                cursor.execute(f"UPDATE prospectos SET {', '.join(sql_parts)} WHERE id_unico = ? OR nombre = ?", (params[-1], params[-1]) if not id_unico else (id_unico, data.get('nombre_original')))
+                # Mantener la lógica de WHERE original para no romper flujos existentes
+                cursor.execute(f"UPDATE prospectos SET {', '.join(sql_parts)} WHERE id_unico = ? OR nombre = ?", (params[-1], params[-1]) if not id_unico else (id_unico, nombre_ref))
 
             cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', (sync_id, action_type, id_unico, json.dumps(data)))
             conn.commit(); conn.close()
@@ -296,6 +301,7 @@ class DataHandler:
             if q_type != "DELETE":
                 f_url = folder_url or data.get('imagenes_url') or ""
                 cursor.execute("UPDATE prospectos SET imagenes_url = ?, validacion = 'OK' WHERE id_unico = ?", (f_url, q_phone_id))
+            self._write_to_journal(q_type, data, "SUCCESS")
         else:
             cursor.execute("UPDATE sync_queue SET status = 'PENDING' WHERE id = ?", (q_id,))
         
@@ -320,7 +326,7 @@ class DataHandler:
                     ws.update_cell(cell.row, col_n, data.get('new_name'))
                 return True, "Ok", None
 
-            # DETERMINAR PREFIJO DINÁMICO DE IMAGEN
+            # DETERMINAR PREFIJO DINÁMICO (RESTAURADO)
             prefix = "evidencia"
             if q_type == "ADD":
                 prefix = "registro"
@@ -334,32 +340,32 @@ class DataHandler:
             folder_url = None
             if data.get('files_payload'):
                 for idx, f in enumerate(data['files_payload']):
-                    # Usar el prefijo dinámico para el nombre del archivo
                     res = self._send_to_script(data, f, f"{prefix}_{idx}.png")
                     if res and res.get('status') == 'success': folder_url = res.get('folderUrl')
 
-            row_map = {
-                self.FIELD_MAP['nombre']: data.get('Nombre'),
-                self.FIELD_MAP['canal']: data.get('Canal'),
-                self.FIELD_MAP['fecha_registro']: data.get('Fecha 1er Contacto'),
-                self.FIELD_MAP['nivel_interes']: data.get('Nivel de Interés'),
-                self.FIELD_MAP['resumen']: data.get('Resumen Conversación'),
-                self.FIELD_MAP['rendimiento']: data.get('Rendimiento'),
-                self.FIELD_MAP['fecha_proxima']: data.get('Fecha Próx. Contacto'),
-                self.FIELD_MAP['estado_final']: data.get('Estado Final', 'Seguimiento'),
-                self.FIELD_MAP['comentarios']: data.get('Comentarios', ''),
-                self.FIELD_MAP['asesora']: data.get('Asesora'),
-                self.FIELD_MAP['imagenes_url']: folder_url or data.get('imagenes_url') or "",
-                self.FIELD_MAP['id_unico']: sync_id
-            }
-
+            # MAPEO TOTAL DE CAMPOS PARA GOOGLE SHEETS (RESTAURADO)
             if q_type == "ADD":
+                row_map = {
+                    self.FIELD_MAP['nombre']: data.get('Nombre'),
+                    self.FIELD_MAP['canal']: data.get('Canal'),
+                    self.FIELD_MAP['fecha_registro']: data.get('Fecha 1er Contacto'),
+                    self.FIELD_MAP['nivel_interes']: data.get('Nivel de Interés'),
+                    self.FIELD_MAP['resumen']: data.get('Resumen Conversación'),
+                    self.FIELD_MAP['rendimiento']: data.get('Rendimiento'),
+                    self.FIELD_MAP['fecha_proxima']: data.get('Fecha Próx. Contacto'),
+                    self.FIELD_MAP['estado_final']: data.get('Estado Final', 'Seguimiento'),
+                    self.FIELD_MAP['comentarios']: data.get('Comentarios', ''),
+                    self.FIELD_MAP['asesora']: data.get('Asesora'),
+                    self.FIELD_MAP['imagenes_url']: folder_url or data.get('imagenes_url') or "",
+                    self.FIELD_MAP['id_unico']: sync_id
+                }
                 headers = self._ensure_columns(ws, headers, row_map.keys())
                 norm_map = {self._normalize(k): v for k, v in row_map.items()}
                 row_vals = [str(norm_map.get(self._normalize(h), "")) for h in headers]
                 ws.append_row(row_vals)
                 return True, "Ok", folder_url
             else:
+                # LÓGICA DE UPDATE: Se mantiene intacta para no romper flujos
                 cell = ws.find(data.get('nombre_original'))
                 if not cell: return False, "No hallado", None
                 updates = data.get('updates', {})
@@ -386,23 +392,18 @@ class DataHandler:
         except: return None
 
     def _map_db_to_ui(self, db_row):
-        """Traduce quirúrgicamente las llaves de la DB (minúsculas) a llaves de UI (PascalCase)."""
+        """Mapeador para que la UI reciba llaves PascalCase (Fix Asesora y Seguimientos)."""
         d = dict(db_row)
         ui_row = {}
-        # Mapeamos campos base usando FIELD_MAP
         for db_key, ui_label in self.FIELD_MAP.items():
-            if db_key in d:
-                ui_row[ui_label] = d[db_key]
+            if db_key in d: ui_row[ui_label] = d[db_key]
         
-        # Mapeamos seguimientos dinámicos (1-30)
         for i in range(1, 31):
             f_db, n_db = f"fecha_seguimiento_{i}", f"notas_seguimiento_{i}"
             if f_db in d: ui_row[f"Fecha Seguimiento {i}"] = d[f_db]
             if n_db in d: ui_row[f"Notas Seguimiento {i}"] = d[n_db]
         
-        # Aseguramos que el ID Sincronización (id_unico) esté presente si el UI lo requiere
         if 'id_unico' in d: ui_row['ID Sincronización'] = d['id_unico']
-        
         return ui_row
 
     def get_clients_for_agent(self, agent_name):
