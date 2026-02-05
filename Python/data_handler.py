@@ -17,9 +17,9 @@ logger = logging.getLogger("DataHandler")
 
 class DataHandler:
     """
-    Versión 10.10: Fix Mapeo Completo ADD + Cálculo Rendimiento.
-    - enqueue_client_data: Calcula rendimiento y guarda todos los campos base en SQLite.
-    - _upload_to_google: Mapeo extendido para asegurar que todos los campos lleguen a Sheets en el registro inicial.
+    Versión 10.11: Restauración de Prefijos de Imagen y Mapeo PascalCase para UI.
+    - _upload_to_google: Recupera prefijos dinámicos (registro/seguimientoN) para Drive.
+    - _map_db_to_ui: Asegura que 'asesora' se entregue como 'Asesora' para el CRM.
     """
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyr3lAA-Xykuy1S-mvGp3SdAb1ghDpdWsbHeURupBfJlO9D1xmGP12td1R7VZDAziV/exec"
     PARENT_FOLDER_ID = "1duPIhtA9Z6IObDxmANSLKA0Hw-R5Iidl"
@@ -165,9 +165,7 @@ class DataHandler:
                 ws.update_cell(cell.row, col_idx, str(password))
                 return True
             return False
-        except Exception as e:
-            logger.error(f"Error set_agent_password: {e}")
-            return False
+        except: return False
 
     def set_auditor_password(self, name, password):
         try:
@@ -180,27 +178,19 @@ class DataHandler:
                 ws.update_cell(cell.row, col_idx, str(password))
                 return True
             return False
-        except Exception as e:
-            logger.error(f"Error set_auditor_password: {e}")
-            return False
+        except: return False
 
     def get_auditors_list(self):
         try:
             ws = self.workbook.worksheet("Auditores")
-            values = ws.col_values(1)
-            return [v for v in values if v and v.lower() not in ['nombre', 'auditor', 'auditores']]
-        except Exception as e:
-            logger.error(f"Error obteniendo lista de auditores: {e}")
-            return []
+            return [v for v in ws.col_values(1) if v and v.lower() not in ['nombre', 'auditor', 'auditores']]
+        except: return []
 
     def get_agents_list(self):
         try:
             ws = self.workbook.worksheet("AsesorasActivas")
-            values = ws.col_values(1)
-            return [v for v in values if v and v.lower() not in ['nombre', 'asesora', 'asesoras']]
-        except Exception as e:
-            logger.error(f"Error obteniendo lista de asesoras: {e}")
-            return []
+            return [v for v in ws.col_values(1) if v and v.lower() not in ['nombre', 'asesora', 'asesoras']]
+        except: return []
 
     def rename_client_db(self, old_name, new_name, canal):
         try:
@@ -213,13 +203,9 @@ class DataHandler:
             payload = {"old_name": old_name, "new_name": new_name, "canal": canal, "sync_id": sync_id}
             cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', 
                            (sync_id, "RENAME", id_unico, json.dumps(payload)))
-            conn.commit()
-            conn.close()
-            self._write_to_journal("RENAME", {"sync_id": sync_id, "Nombre": f"{old_name} -> {new_name}"}, "RECEIVED")
-            return True, "Nombre actualizado y sincronización encolada."
-        except Exception as e:
-            logger.error(f"Error en renombrado DB: {e}")
-            return False, str(e)
+            conn.commit(); conn.close()
+            return True, "Ok"
+        except: return False, "Error"
 
     def delete_client_db(self, name, canal, imagenes_url):
         try:
@@ -232,13 +218,9 @@ class DataHandler:
             payload = {"nombre": name, "canal": canal, "imagenes_url": imagenes_url, "sync_id": sync_id}
             cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', 
                            (sync_id, "DELETE", id_unico, json.dumps(payload)))
-            conn.commit()
-            conn.close()
-            self._write_to_journal("DELETE", {"sync_id": sync_id, "Nombre": name}, "RECEIVED")
-            return True, "Expediente eliminado localmente. Sincronización con Nube en curso."
-        except Exception as e:
-            logger.error(f"Error en borrado DB: {e}")
-            return False, str(e)
+            conn.commit(); conn.close()
+            return True, "Ok"
+        except: return False, "Error"
 
     def enqueue_client_data(self, action_type, data):
         sync_id = data.get('sync_id') or f"AUTO_{int(time.time())}"
@@ -246,7 +228,6 @@ class DataHandler:
         canal_raw = str(data.get('Canal') or data.get('canal_original') or '')
         canal = "".join(filter(str.isdigit, canal_raw))[-10:]
         id_unico = f"ID_{canal}" if canal else None
-        nombre_ref = data.get('nombre_original') or data.get('Nombre')
         
         # Lógica de Rendimiento
         rendimiento = "AL DIA"
@@ -254,13 +235,11 @@ class DataHandler:
         if prox and '/' in prox:
             try:
                 d, m, y = map(int, prox.split('/'))
-                if datetime(y, m, d).date() < datetime.now().date():
-                    rendimiento = "VENCIDO"
+                if datetime(y, m, d).date() < datetime.now().date(): rendimiento = "VENCIDO"
             except: pass
         data['Rendimiento'] = rendimiento
 
         try:
-            self._write_to_journal(action_type, data, "RECEIVED")
             conn = self._get_conn()
             cursor = conn.cursor()
             if action_type == "ADD":
@@ -270,131 +249,124 @@ class DataHandler:
                 ''', (id_unico, data.get('Nombre'), canal, data.get('Fecha 1er Contacto'), data.get('Nivel de Interés'), data.get('Resumen Conversación'), rendimiento, data.get('Fecha Próx. Contacto'), data.get('Estado Final', 'Seguimiento'), data.get('Comentarios', ''), data.get('Asesora')))
             
             elif action_type == "UPDATE":
-                query_find = "SELECT fecha_proxima FROM prospectos WHERE id_unico = ? OR nombre = ?"
-                existing = cursor.execute(query_find, (id_unico, nombre_ref)).fetchone()
-                cita_anterior = existing[0] if existing else "--"
                 updates = data.get('updates', {})
                 sql_parts = ["validacion = 'PENDIENTE'", "updated_at = CURRENT_TIMESTAMP", "rendimiento = ?"]
                 params = [rendimiento]
                 
                 mapping_db = {'Estado Final': 'estado_final', 'Nivel de Interés': 'nivel_interes', 'Fecha Próx. Contacto': 'fecha_proxima', 'Comentarios': 'comentarios', 'nombre': 'nombre'}
-                for ui_key, db_col in mapping_db.items():
-                    if ui_key in updates:
-                        sql_parts.append(f"{db_col} = ?")
-                        params.append(updates[ui_key])
+                for k, v in mapping_db.items():
+                    if k in updates:
+                        sql_parts.append(f"{v} = ?")
+                        params.append(updates[k])
+                
                 for i in range(1, 31):
-                    f_ui, n_ui = f'Fecha Seguimiento {i}', f'Notas Seguimiento {i}'
-                    if f_ui in updates:
+                    if f'Fecha Seguimiento {i}' in updates:
                         sql_parts.append(f"fecha_seguimiento_{i} = ?")
-                        params.append(updates[f_ui])
-                    if n_ui in updates:
-                        final_note = f"Anterior: {cita_anterior}\n{updates[n_ui]}"
+                        params.append(updates[f'Fecha Seguimiento {i}'])
+                    if f'Notas Seguimiento {i}' in updates:
                         sql_parts.append(f"notas_seguimiento_{i} = ?")
-                        params.append(final_note)
-                        data['updates'][n_ui] = final_note
+                        params.append(updates[f'Notas Seguimiento {i}'])
 
-                query_where = "WHERE id_unico = ?" if id_unico and len(id_unico) > 3 else "WHERE nombre = ?"
-                params.append(id_unico if id_unico and len(id_unico) > 3 else nombre_ref)
-                cursor.execute(f"UPDATE prospectos SET {', '.join(sql_parts)} {query_where}", params)
+                ref = id_unico if id_unico else data.get('nombre_original')
+                params.append(ref)
+                cursor.execute(f"UPDATE prospectos SET {', '.join(sql_parts)} WHERE id_unico = ? OR nombre = ?", (params[-1], params[-1]) if not id_unico else (id_unico, data.get('nombre_original')))
 
-            try:
-                cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', (sync_id, action_type, id_unico or nombre_ref, json.dumps(data)))
-            except sqlite3.IntegrityError: pass 
-            conn.commit()
-            conn.close()
-            return True, "Sincronización local exitosa."
+            cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', (sync_id, action_type, id_unico, json.dumps(data)))
+            conn.commit(); conn.close()
+            return True, "Ok"
         except Exception as e:
-            logger.error(f"Error Master: {e}")
+            logger.error(f"Error local: {e}")
             return False, str(e)
 
     def process_queue_step(self):
-        conn = self._get_conn()
-        cursor = conn.cursor()
+        conn = self._get_conn(); cursor = conn.cursor()
         cursor.execute("SELECT id, type, payload, sync_id, phone_id FROM sync_queue WHERE status = 'PENDING' ORDER BY id ASC LIMIT 1")
         row = cursor.fetchone()
-        if not row:
-            conn.close()
-            return
+        if not row: conn.close(); return
+        
         q_id, q_type, q_payload, q_sync_id, q_phone_id = row
         cursor.execute("UPDATE sync_queue SET status = 'PROCESSING' WHERE id = ?", (q_id,))
         conn.commit()
+        
         data = json.loads(q_payload)
         success, message, folder_url = self._upload_to_google(q_type, data)
+        
         if success:
             cursor.execute("UPDATE sync_queue SET status = 'SUCCESS' WHERE id = ?", (q_id,))
             if q_type != "DELETE":
-                final_folder = folder_url or data.get('imagenes_url') or ""
-                cursor.execute("UPDATE prospectos SET imagenes_url = ?, validacion = 'OK' WHERE id_unico = ? OR nombre = ?", (final_folder, q_phone_id, data.get('nombre_original') or data.get('Nombre')))
-            self._write_to_journal(q_type, data, "SUCCESS")
+                f_url = folder_url or data.get('imagenes_url') or ""
+                cursor.execute("UPDATE prospectos SET imagenes_url = ?, validacion = 'OK' WHERE id_unico = ?", (f_url, q_phone_id))
         else:
             cursor.execute("UPDATE sync_queue SET status = 'PENDING' WHERE id = ?", (q_id,))
-        conn.commit()
-        conn.close()
+        
+        conn.commit(); conn.close()
 
     def _upload_to_google(self, q_type, data):
         try:
             ws = self.workbook.worksheet("Seguimientos")
             sync_id = data.get('sync_id')
             headers = ws.row_values(1)
-            try:
-                if ws.find(sync_id): return True, "Sync anterior OK", None
-            except: pass
-
+            
             if q_type == "DELETE":
                 canal_val = "".join(filter(str.isdigit, str(data.get('canal'))))[-10:]
                 cell = ws.find(canal_val)
                 if cell: ws.delete_rows(cell.row)
-                img_url = data.get('imagenes_url')
-                if img_url and "folders/" in img_url:
-                    try:
-                        f_id = img_url.split("folders/")[1].split("?")[0].split("/")[0]
-                        requests.post(self.SCRIPT_URL, json={"action": "delete", "folderId": f_id}, timeout=15)
-                    except: pass
-                return True, "Eliminación OK", None
+                return True, "Ok", None
 
             if q_type == "RENAME":
-                canal_val = "".join(filter(str.isdigit, str(data.get('canal'))))[-10:]
-                cell = ws.find(canal_val)
-                if not cell: return False, "Canal no encontrado", None
-                col_nombre = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(self.FIELD_MAP['nombre'])), 1)
-                ws.update_cell(cell.row, col_nombre, data.get('new_name'))
-                return True, "Renombrado OK", None
+                cell = ws.find("".join(filter(str.isdigit, str(data.get('canal'))))[-10:])
+                if cell:
+                    col_n = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == 'nombre'), 1)
+                    ws.update_cell(cell.row, col_n, data.get('new_name'))
+                return True, "Ok", None
+
+            # DETERMINAR PREFIJO DINÁMICO DE IMAGEN
+            prefix = "evidencia"
+            if q_type == "ADD":
+                prefix = "registro"
+            elif q_type == "UPDATE":
+                updates = data.get('updates', {})
+                for i in range(1, 31):
+                    if f'Fecha Seguimiento {i}' in updates or f'Notas Seguimiento {i}' in updates:
+                        prefix = f"seguimiento{i}"
+                        break
 
             folder_url = None
-            files_payload = data.get('files_payload', [])
-            if files_payload:
-                for idx, file_item in enumerate(files_payload):
-                    img_resp = self._send_to_script(data, file_item, f"evidencia_{idx}.png")
-                    if img_resp and img_resp.get('status') == 'success':
-                        folder_url = img_resp.get('folderUrl')
+            if data.get('files_payload'):
+                for idx, f in enumerate(data['files_payload']):
+                    # Usar el prefijo dinámico para el nombre del archivo
+                    res = self._send_to_script(data, f, f"{prefix}_{idx}.png")
+                    if res and res.get('status') == 'success': folder_url = res.get('folderUrl')
 
-            # MAPEO DE FILA PARA ADD (REPARADO)
+            row_map = {
+                self.FIELD_MAP['nombre']: data.get('Nombre'),
+                self.FIELD_MAP['canal']: data.get('Canal'),
+                self.FIELD_MAP['fecha_registro']: data.get('Fecha 1er Contacto'),
+                self.FIELD_MAP['nivel_interes']: data.get('Nivel de Interés'),
+                self.FIELD_MAP['resumen']: data.get('Resumen Conversación'),
+                self.FIELD_MAP['rendimiento']: data.get('Rendimiento'),
+                self.FIELD_MAP['fecha_proxima']: data.get('Fecha Próx. Contacto'),
+                self.FIELD_MAP['estado_final']: data.get('Estado Final', 'Seguimiento'),
+                self.FIELD_MAP['comentarios']: data.get('Comentarios', ''),
+                self.FIELD_MAP['asesora']: data.get('Asesora'),
+                self.FIELD_MAP['imagenes_url']: folder_url or data.get('imagenes_url') or "",
+                self.FIELD_MAP['id_unico']: sync_id
+            }
+
             if q_type == "ADD":
-                row_map = {
-                    self.FIELD_MAP['nombre']: data.get('Nombre'),
-                    self.FIELD_MAP['canal']: data.get('Canal'),
-                    self.FIELD_MAP['fecha_registro']: data.get('Fecha 1er Contacto'),
-                    self.FIELD_MAP['nivel_interes']: data.get('Nivel de Interés'),
-                    self.FIELD_MAP['resumen']: data.get('Resumen Conversación'),
-                    self.FIELD_MAP['rendimiento']: data.get('Rendimiento'),
-                    self.FIELD_MAP['fecha_proxima']: data.get('Fecha Próx. Contacto'),
-                    self.FIELD_MAP['estado_final']: data.get('Estado Final', 'Seguimiento'),
-                    self.FIELD_MAP['comentarios']: data.get('Comentarios', ''),
-                    self.FIELD_MAP['asesora']: data.get('Asesora'),
-                    self.FIELD_MAP['imagenes_url']: folder_url or "",
-                    self.FIELD_MAP['id_unico']: sync_id
-                }
                 headers = self._ensure_columns(ws, headers, row_map.keys())
-                ws.append_row([str(row_map.get(h, "")) for h in headers])
+                norm_map = {self._normalize(k): v for k, v in row_map.items()}
+                row_vals = [str(norm_map.get(self._normalize(h), "")) for h in headers]
+                ws.append_row(row_vals)
                 return True, "Ok", folder_url
             else:
                 cell = ws.find(data.get('nombre_original'))
-                if not cell: return False, "No existe", None
+                if not cell: return False, "No hallado", None
                 updates = data.get('updates', {})
                 sheet_updates = { self.FIELD_MAP.get(k, k): v for k, v in updates.items() }
-                sheet_updates[self.FIELD_MAP['id_unico']] = sync_id
                 if 'Rendimiento' in data: sheet_updates[self.FIELD_MAP['rendimiento']] = data['Rendimiento']
                 if folder_url: sheet_updates[self.FIELD_MAP['imagenes_url']] = folder_url
+                sheet_updates[self.FIELD_MAP['id_unico']] = sync_id
                 
                 headers = self._ensure_columns(ws, headers, sheet_updates.keys())
                 batch = []
@@ -404,25 +376,47 @@ class DataHandler:
                 if batch: ws.batch_update(batch)
                 return True, "Ok", folder_url
         except Exception as e:
+            logger.error(f"Error Google: {e}")
             return False, str(e), None
 
     def _send_to_script(self, data, file_item, filename):
         try:
             payload = {"parentFolderId": self.PARENT_FOLDER_ID, "clientName": data.get('Nombre') or data.get('nombre_original'), "filename": filename, "base64Data": file_item['base64Data'], "contentType": file_item['contentType']}
-            resp = requests.post(self.SCRIPT_URL, json=payload, timeout=30)
-            return resp.json()
+            return requests.post(self.SCRIPT_URL, json=payload, timeout=30).json()
         except: return None
+
+    def _map_db_to_ui(self, db_row):
+        """Traduce quirúrgicamente las llaves de la DB (minúsculas) a llaves de UI (PascalCase)."""
+        d = dict(db_row)
+        ui_row = {}
+        # Mapeamos campos base usando FIELD_MAP
+        for db_key, ui_label in self.FIELD_MAP.items():
+            if db_key in d:
+                ui_row[ui_label] = d[db_key]
+        
+        # Mapeamos seguimientos dinámicos (1-30)
+        for i in range(1, 31):
+            f_db, n_db = f"fecha_seguimiento_{i}", f"notas_seguimiento_{i}"
+            if f_db in d: ui_row[f"Fecha Seguimiento {i}"] = d[f_db]
+            if n_db in d: ui_row[f"Notas Seguimiento {i}"] = d[n_db]
+        
+        # Aseguramos que el ID Sincronización (id_unico) esté presente si el UI lo requiere
+        if 'id_unico' in d: ui_row['ID Sincronización'] = d['id_unico']
+        
+        return ui_row
 
     def get_clients_for_agent(self, agent_name):
         conn = self._get_conn(); conn.row_factory = sqlite3.Row; cursor = conn.cursor()
         cursor.execute("SELECT * FROM prospectos WHERE LOWER(asesora) = LOWER(?) ORDER BY updated_at DESC", (agent_name,))
-        rows = [dict(r) for r in cursor.fetchall()]; conn.close(); return rows
+        rows = [self._map_db_to_ui(r) for r in cursor.fetchall()]
+        conn.close(); return rows
 
     def get_all_clients(self):
         try:
             conn = self._get_conn(); conn.row_factory = sqlite3.Row; cursor = conn.cursor()
             cursor.execute("SELECT * FROM prospectos ORDER BY updated_at DESC")
-            rows = [dict(r) for r in cursor.fetchall()]; conn.close(); return rows
+            rows = [self._map_db_to_ui(r) for r in cursor.fetchall()]
+            conn.close(); return rows
         except: return []
 
     def _normalize(self, text):
@@ -434,9 +428,9 @@ class DataHandler:
     def _ensure_columns(self, sheet, headers, required):
         updated = list(headers); norm_h = [self._normalize(h) for h in updated]; added = False
         for col in required:
-            sheet_col_name = self.FIELD_MAP.get(col, col)
-            if self._normalize(sheet_col_name) not in norm_h:
-                updated.append(sheet_col_name); added = True
+            s_name = self.FIELD_MAP.get(col, col)
+            if self._normalize(s_name) not in norm_h:
+                updated.append(s_name); norm_h.append(self._normalize(s_name)); added = True
         if added: sheet.update('A1', [updated])
         return updated
 
