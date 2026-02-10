@@ -261,14 +261,28 @@ class DataHandler:
                     if k in updates:
                         sql_parts.append(f"{v} = ?")
                         params.append(updates[k])
-                
+
+                #Obtener ultima fecha de seguimiento
+                query_find = "SELECT fecha_proxima FROM prospectos WHERE id_unico = ? OR nombre = ?"
+                existing = cursor.execute(query_find, (id_unico, nombre_ref)).fetchone()
+                fecha_anterior = existing[0] if existing else "--"
+
+
                 for i in range(1, 31):
                     if f'Fecha Seguimiento {i}' in updates:
                         sql_parts.append(f"fecha_seguimiento_{i} = ?")
                         params.append(updates[f'Fecha Seguimiento {i}'])
+                    # La lógica dentro del if de notas debería quedar similar a esto:
                     if f'Notas Seguimiento {i}' in updates:
+                        nota_original = updates[f'Notas Seguimiento {i}']
+                        # Aquí estampamos el texto antes de guardarlo en la DB y en la cola
+                        nota_con_prefijo = f"Cita anterior programada para: {fecha_anterior}\n{nota_original}"
+                        
                         sql_parts.append(f"notas_seguimiento_{i} = ?")
-                        params.append(updates[f'Notas Seguimiento {i}'])
+                        params.append(nota_con_prefijo)
+
+                        # MUY IMPORTANTE: También debes actualizar el 'payload' que va a la nube
+                        data['updates'][f'Notas Seguimiento {i}'] = nota_con_prefijo
 
                 # FIX QUIRÚRGICO DE BINDINGS
                 ref = id_unico if id_unico else nombre_ref
