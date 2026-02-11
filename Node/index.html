@@ -26,8 +26,14 @@
             backdrop-filter: blur(10px);
         }
 
-        .custom-scroll::-webkit-scrollbar { width: 5px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
 
         .chrome-tab-container {
             @apply flex gap-1 bg-slate-100/80 pt-2 px-4 rounded-t-[2.5rem] border-b border-slate-200;
@@ -43,26 +49,66 @@
         }
 
         .chrome-tab-active {
-            @apply bg-white shadow-[0_-2px_8px_rgba(0,0,0,0.03)] z-10 text-slate-700;
+            @apply bg-white shadow-[0_-2px_8px_rgba(0, 0, 0, 0.03)] z-10 text-slate-700;
         }
 
-        .chrome-tab-active::before, .chrome-tab-active::after {
-            content: ''; @apply absolute bottom-0 w-3 h-3 bg-transparent pointer-events-none;
+        .chrome-tab-active::before,
+        .chrome-tab-active::after {
+            content: '';
+            @apply absolute bottom-0 w-3 h-3 bg-transparent pointer-events-none;
         }
-        .chrome-tab-active::before { left: -12px; @apply rounded-br-xl; box-shadow: 6px 0 0 0 white; }
-        .chrome-tab-active::after { right: -12px; @apply rounded-bl-xl; box-shadow: -6px 0 0 0 white; }
+
+        .chrome-tab-active::before {
+            left: -12px;
+            @apply rounded-br-xl;
+            box-shadow: 6px 0 0 0 white;
+        }
+
+        .chrome-tab-active::after {
+            right: -12px;
+            @apply rounded-bl-xl;
+            box-shadow: -6px 0 0 0 white;
+        }
 
         @keyframes pulse-sync {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(0.98); }
-        }
-        .sync-active { animation: pulse-sync 2s infinite ease-in-out; }
 
-        .warning-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.6;
+                transform: scale(0.98);
+            }
+        }
+
+        .sync-active {
+            animation: pulse-sync 2s infinite ease-in-out;
+        }
+
+        .warning-shake {
+            animation: shake 0.4s cubic-bezier(.36, .07, .19, .97) both;
+        }
+
         @keyframes shake {
-            10%, 90% { transform: translate3d(-1px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
-            40%, 60% { transform: translate3d(3px, 0, 0); }
+
+            10%,
+            90% {
+                transform: translate3d(-1px, 0, 0);
+            }
+
+            30%,
+            50%,
+            70% {
+                transform: translate3d(-3px, 0, 0);
+            }
+
+            40%,
+            60% {
+                transform: translate3d(3px, 0, 0);
+            }
         }
     </style>
 </head>
@@ -170,7 +216,10 @@
             const [pendingCount, setPendingCount] = useState(0);
             const [showHistoryModal, setShowHistoryModal] = useState(false);
             const [currentPage, setCurrentPage] = useState(1);
-            
+            const [calendarEvents, setCalendarEvents] = useState([]);
+            const [loadingCalendar, setLoadingCalendar] = useState(false);
+            const [showCalendar, setShowCalendar] = useState(false); // Control de despliegue
+
             const isSyncing = useRef(false);
             const entriesPerPage = 15;
 
@@ -196,6 +245,7 @@
                 } catch (e) { console.error(e); }
             };
 
+
             const fetchClients = async (name) => {
                 setLoading(true);
                 try {
@@ -207,6 +257,31 @@
                 } catch (e) { console.error(e); }
                 setLoading(false);
             };
+
+
+            const fetchMyCalendar = async () => {
+                if (!showCalendar) {
+                    setShowCalendar(true);
+                    if (calendarEvents.length === 0) {
+                        setLoadingCalendar(true);
+                        try {
+                            const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/my-calendar', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ asesora: user })
+                            });
+                            const data = await res.json();
+                            setCalendarEvents(Array.isArray(data) ? data : []);
+                        } catch (err) {
+                            console.error("Error al cargar calendario maestro");
+                        }
+                        setLoadingCalendar(false);
+                    }
+                } else {
+                    setShowCalendar(false);
+                }
+            };
+
 
             const processQueue = async () => {
                 if (isSyncing.current) return;
@@ -254,7 +329,7 @@
                     const matchesSearch = cName.includes(search) || cPhone.includes(search);
                     const matchesStatus = filters.status === '' || c['Estado Final'] === filters.status;
                     const matchesInterest = filters.interest === '' || (c['Nivel de Interés'] || '').includes(filters.interest);
-                    
+
                     let matchesDate = true;
                     if (filters.dateRange !== '') {
                         const proxStr = c['Fecha Próx. Contacto'];
@@ -363,6 +438,58 @@
                             </button>
                         </div>
 
+
+                        {/* MÓDULO DE AGENDA MAESTRA DESPLEGABLE */}
+                        <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div
+                                onClick={fetchMyCalendar}
+                                className="glass p-6 rounded-[2.5rem] border border-white shadow-sm flex items-center justify-between cursor-pointer hover:bg-white/50 transition-all"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md" style={{ backgroundColor: activeTheme.primary }}>
+                                        <i className={`fas ${showCalendar ? 'fa-calendar-minus' : 'fa-calendar-alt'} text-sm`}></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-[10px] font-black uppercase text-slate-800 tracking-[0.15em] leading-none">Mi Agenda Maestra</h3>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Próximas citas y compromisos</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {loadingCalendar && <i className="fas fa-circle-notch animate-spin text-slate-300"></i>}
+                                    <i className={`fas fa-chevron-${showCalendar ? 'up' : 'down'} text-slate-300 text-xs`}></i>
+                                </div>
+                            </div>
+
+                            {/* PANEL EXPANDIBLE */}
+                            {showCalendar && (
+                                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in zoom-in-95 duration-300">
+                                    {calendarEvents.length === 0 && !loadingCalendar ? (
+                                        <div className="md:col-span-3 glass p-10 rounded-[2.5rem] text-center border border-white">
+                                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No hay citas programadas en el calendario maestro</p>
+                                        </div>
+                                    ) : (
+                                        calendarEvents.map((ev, i) => (
+                                            <div key={i} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 border-l-4" style={{ borderLeftColor: activeTheme.primary }}>
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <p className="font-black text-slate-700 text-[11px] leading-tight uppercase">{ev.summary}</p>
+                                                    <i className="far fa-clock text-slate-200 text-[10px]"></i>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 font-bold italic mb-2">
+                                                    {new Date(ev.start).toLocaleString('es-MX', {
+                                                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                                                    })}
+                                                </p>
+                                                {ev.description && (
+                                                    <p className="text-[9px] text-slate-400 line-clamp-2 border-t border-slate-50 pt-2 mt-2">{ev.description}</p>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+
                         <div className="glass rounded-[3rem] shadow-2xl overflow-hidden border border-white">
                             <div className="overflow-x-auto custom-scroll">
                                 <table className="w-full text-left table-auto">
@@ -385,26 +512,24 @@
                                                 </td>
                                                 <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{c.Canal || '--'}</td>
                                                 <td className="px-8 py-5">
-                                                    <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${
-                                                        (c['Nivel de Interés'] || '').includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
-                                                    }`}>{(c['Nivel de Interés'] || '').split(' <')[0] || 'N/A'}</span>
+                                                    <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${(c['Nivel de Interés'] || '').includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
+                                                        }`}>{(c['Nivel de Interés'] || '').split(' <')[0] || 'N/A'}</span>
                                                 </td>
                                                 <td className={`px-8 py-5 text-[11px] font-black ${(() => {
-                                                        if (!c['Fecha Próx. Contacto'] || c['Fecha Próx. Contacto'] === '--') return 'text-slate-300';
-                                                        const [d, m, y] = c['Fecha Próx. Contacto'].split('/').map(Number);
-                                                        const pDate = new Date(y, m - 1, d);
-                                                        const nowMx = new Date(getMexicoDate() + "T00:00:00");
-                                                        if (pDate < nowMx) return 'text-red-500';
-                                                        if (pDate.getTime() === nowMx.getTime()) return 'text-orange-500';
-                                                        return 'text-sky-500';
-                                                    })()}`}>
+                                                    if (!c['Fecha Próx. Contacto'] || c['Fecha Próx. Contacto'] === '--') return 'text-slate-300';
+                                                    const [d, m, y] = c['Fecha Próx. Contacto'].split('/').map(Number);
+                                                    const pDate = new Date(y, m - 1, d);
+                                                    const nowMx = new Date(getMexicoDate() + "T00:00:00");
+                                                    if (pDate < nowMx) return 'text-red-500';
+                                                    if (pDate.getTime() === nowMx.getTime()) return 'text-orange-500';
+                                                    return 'text-sky-500';
+                                                })()}`}>
                                                     {c['Fecha Próx. Contacto'] || '--'}
                                                 </td>
                                                 <td className="px-8 py-5">
-                                                    <span className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${
-                                                        c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                    <span className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' :
                                                         c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                                    }`}>{c['Estado Final']}</span>
+                                                        }`}>{c['Estado Final']}</span>
                                                 </td>
                                                 <td className="px-8 py-5 text-right pr-12">
                                                     <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center ml-auto hover:bg-sky-50 hover:text-sky-600 transition-all border border-slate-100">
@@ -421,11 +546,11 @@
 
                             {totalPages > 1 && (
                                 <div className="p-8 flex justify-center items-center gap-3 bg-slate-50/30 border-t border-slate-100">
-                                    <button disabled={currentPage === 1} onClick={(e) => {e.stopPropagation(); setCurrentPage(p => p - 1)}} className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-20 transition-all border-none outline-none"><i className="fas fa-chevron-left text-xs"></i></button>
+                                    <button disabled={currentPage === 1} onClick={(e) => { e.stopPropagation(); setCurrentPage(p => p - 1) }} className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-20 transition-all border-none outline-none"><i className="fas fa-chevron-left text-xs"></i></button>
                                     {[...Array(totalPages)].map((_, i) => (
-                                        <button key={i} onClick={(e) => {e.stopPropagation(); setCurrentPage(i + 1)}} className={`w-12 h-12 rounded-2xl font-black text-xs transition-all border-none outline-none ${currentPage === i + 1 ? 'text-white shadow-xl' : 'text-slate-400 hover:bg-white'}`} style={currentPage === i + 1 ? { backgroundColor: activeTheme.primary } : {}}>{i + 1}</button>
+                                        <button key={i} onClick={(e) => { e.stopPropagation(); setCurrentPage(i + 1) }} className={`w-12 h-12 rounded-2xl font-black text-xs transition-all border-none outline-none ${currentPage === i + 1 ? 'text-white shadow-xl' : 'text-slate-400 hover:bg-white'}`} style={currentPage === i + 1 ? { backgroundColor: activeTheme.primary } : {}}>{i + 1}</button>
                                     ))}
-                                    <button disabled={currentPage === totalPages} onClick={(e) => {e.stopPropagation(); setCurrentPage(p => p + 1)}} className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-20 transition-all border-none outline-none"><i className="fas fa-chevron-right text-xs"></i></button>
+                                    <button disabled={currentPage === totalPages} onClick={(e) => { e.stopPropagation(); setCurrentPage(p => p + 1) }} className="w-12 h-12 rounded-2xl flex items-center justify-center text-slate-400 hover:bg-white disabled:opacity-20 transition-all border-none outline-none"><i className="fas fa-chevron-right text-xs"></i></button>
                                 </div>
                             )}
                         </div>
@@ -433,24 +558,24 @@
 
                     {showHistoryModal && <HistoryModal onClose={() => setShowHistoryModal(false)} />}
                     {statusAlert && <StatusModal alert={statusAlert} onClose={() => { setStatusAlert(null); if (statusAlert.type === 'success' && user) fetchClients(user); }} />}
-                    
-                    {modal === 'new' && <NewClientModal 
-                        theme={activeTheme} 
-                        user={user} 
-                        onClose={() => setModal(null)} 
-                        onRefresh={() => fetchClients(user)} 
-                        setStatus={setStatusAlert} 
-                        onQueueChange={setPendingCount} 
-                        existingClients={clients} 
+
+                    {modal === 'new' && <NewClientModal
+                        theme={activeTheme}
+                        user={user}
+                        onClose={() => setModal(null)}
+                        onRefresh={() => fetchClients(user)}
+                        setStatus={setStatusAlert}
+                        onQueueChange={setPendingCount}
+                        existingClients={clients}
                     />}
-                    
-                    {modal === 'edit' && <EditClientModal 
-                        theme={activeTheme} 
-                        client={selectedClient} 
-                        onClose={() => { setModal(null); setSelectedClient(null); }} 
-                        onRefresh={() => fetchClients(user)} 
-                        setStatus={setStatusAlert} 
-                        onQueueChange={setPendingCount} 
+
+                    {modal === 'edit' && <EditClientModal
+                        theme={activeTheme}
+                        client={selectedClient}
+                        onClose={() => { setModal(null); setSelectedClient(null); }}
+                        onRefresh={() => fetchClients(user)}
+                        setStatus={setStatusAlert}
+                        onQueueChange={setPendingCount}
                     />}
                 </div>
             );
@@ -481,13 +606,13 @@
             };
 
             const save = async (e) => {
-                if(e) e.preventDefault();
+                if (e) e.preventDefault();
                 const cleanPhone = form.Canal.replace(/\D/g, '').slice(-10);
                 if (cleanPhone.length !== 10) return setStatus({ type: 'error', title: 'Error', message: "El teléfono debe ser de 10 dígitos." });
                 setSending(true);
 
                 const syncId = generateSyncId();
-                const payload = { 
+                const payload = {
                     id_unico: `ID_${cleanPhone}`,
                     Nombre: form.Nombre,
                     Canal: cleanPhone,
@@ -497,11 +622,11 @@
                     'Fecha Próx. Contacto': form['Fecha Próx. Contacto'],
                     'Estado Final': form['Estado Final'],
                     Asesora: form.Asesora,
-                    sync_id: syncId, 
-                    files_payload: files, 
-                    etapa: 'nuevo' 
+                    sync_id: syncId,
+                    files_payload: files,
+                    etapa: 'nuevo'
                 };
-                
+
                 const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
                 queue.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/add-client', payload });
                 localStorage.setItem('crm_sync_queue', JSON.stringify(queue));
@@ -537,29 +662,29 @@
                         <form onSubmit={save} className="p-10 space-y-6 max-h-[70vh] overflow-y-auto custom-scroll">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nombre Completo</label>
-                                <input required type="text" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner outline-none" value={form.Nombre} onChange={e => setForm({...form, Nombre: e.target.value})} />
+                                <input required type="text" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner outline-none" value={form.Nombre} onChange={e => setForm({ ...form, Nombre: e.target.value })} />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 flex justify-between">WhatsApp (10 Dígitos) {duplicate && <span className="text-red-500 font-black animate-pulse">⚠️ YA EXISTE</span>}</label>
-                                    <input required type="text" className={`w-full p-5 rounded-2xl font-bold text-sm border-none shadow-inner outline-none ${duplicate ? 'bg-red-50 text-red-600 warning-shake ring-1 ring-red-200' : 'bg-slate-50'}`} value={form.Canal} onChange={e => setForm({...form, Canal: e.target.value.replace(/\D/g, '').slice(0,10)})} />
+                                    <input required type="text" className={`w-full p-5 rounded-2xl font-bold text-sm border-none shadow-inner outline-none ${duplicate ? 'bg-red-50 text-red-600 warning-shake ring-1 ring-red-200' : 'bg-slate-50'}`} value={form.Canal} onChange={e => setForm({ ...form, Canal: e.target.value.replace(/\D/g, '').slice(0, 10) })} />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Estado</label>
-                                    <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Estado Final']} onChange={e => setForm({...form, 'Estado Final': e.target.value})}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                                    <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Estado Final']} onChange={e => setForm({ ...form, 'Estado Final': e.target.value })}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
                                 </div>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nivel de Interés</label>
-                                <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Nivel de Interés']} onChange={e => setForm({...form, 'Nivel de Interés': e.target.value})}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                                <select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-sm border-none shadow-inner outline-none cursor-pointer" value={form['Nivel de Interés']} onChange={e => setForm({ ...form, 'Nivel de Interés': e.target.value })}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select>
                             </div>
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">1er Contacto</label><input disabled type="text" value={form['Fecha 1er Contacto']} className="w-full p-5 bg-slate-100/50 rounded-2xl font-bold text-sm border-none opacity-50" /></div>
-                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Próxima Cita</label><input required type="date" value={toInputDate(form['Fecha Próx. Contacto'])} className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner" onChange={e => setForm({...form, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} /></div>
+                                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Próxima Cita</label><input required type="date" value={toInputDate(form['Fecha Próx. Contacto'])} className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm border-none shadow-inner" onChange={e => setForm({ ...form, 'Fecha Próx. Contacto': toSheetDate(e.target.value) })} /></div>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Resumen Conversación</label>
-                                <textarea required className="w-full p-8 bg-slate-50 rounded-[2.5rem] font-medium text-sm h-32 border-none shadow-inner outline-none" placeholder="Contexto de la primera charla..." value={form['Resumen Conversación']} onChange={e => setForm({...form, 'Resumen Conversación': e.target.value})}></textarea>
+                                <textarea required className="w-full p-8 bg-slate-50 rounded-[2.5rem] font-medium text-sm h-32 border-none shadow-inner outline-none" placeholder="Contexto de la primera charla..." value={form['Resumen Conversación']} onChange={e => setForm({ ...form, 'Resumen Conversación': e.target.value })}></textarea>
                             </div>
                             <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-center relative cursor-pointer hover:bg-slate-50 transition-all">
                                 <input multiple type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
@@ -579,14 +704,14 @@
             const [newPhotos, setNewPhotos] = useState([]);
             const [sending, setSending] = useState(false);
             const isLocked = client['Estado Final'] === 'Venta' || client['Estado Final'] === 'No interesado';
-            
+
             const completedList = useMemo(() => {
-                let list = []; 
-                for (let i = 1; i <= 30; i++) { 
+                let list = [];
+                for (let i = 1; i <= 30; i++) {
                     const fKey = `Fecha Seguimiento ${i}`;
                     const nKey = `Notas Seguimiento ${i}`;
                     if (client[fKey]) list.push({ n: i, fecha: client[fKey], nota: client[nKey] });
-                } 
+                }
                 return list;
             }, [client]);
 
@@ -598,10 +723,10 @@
             // EFECTO DE TRAZABILIDAD: Pre-llenado de fecha únicamente
             useEffect(() => {
                 if (tab === 'new' && nextIdx <= 30 && (!localForm[`Notas Seguimiento ${nextIdx}`] || localForm[`Notas Seguimiento ${nextIdx}`] === '')) {
-                    setLocalForm(prev => ({ 
-                        ...prev, 
+                    setLocalForm(prev => ({
+                        ...prev,
                         [`Fecha Seguimiento ${nextIdx}`]: toSheetDate(getMexicoDate()),
-                        [`Notas Seguimiento ${nextIdx}`]: '' 
+                        [`Notas Seguimiento ${nextIdx}`]: ''
                     }));
                 }
             }, [tab, nextIdx]);
@@ -617,14 +742,14 @@
             };
 
             const update = async (e) => {
-                if(e) e.preventDefault();
+                if (e) e.preventDefault();
                 setSending(true);
                 const syncId = generateSyncId();
-                const updates = { 
-                    'Estado Final': localForm['Estado Final'], 
-                    'Nivel de Interés': localForm['Nivel de Interés'], 
-                    'Fecha Próx. Contacto': localForm['Fecha Próx. Contacto'], 
-                    'Comentarios': localForm['Comentarios'] 
+                const updates = {
+                    'Estado Final': localForm['Estado Final'],
+                    'Nivel de Interés': localForm['Nivel de Interés'],
+                    'Fecha Próx. Contacto': localForm['Fecha Próx. Contacto'],
+                    'Comentarios': localForm['Comentarios']
                 };
                 if (tab === 'new' && nextIdx <= 30) {
                     updates[`Fecha Seguimiento ${nextIdx}`] = localForm[`Fecha Seguimiento ${nextIdx}`];
@@ -688,32 +813,32 @@
                                 </div>
                             </div>}
                             {tab === 'history' && <div className="space-y-8 animate-in fade-in duration-300">
-                                {completedList.length === 0 ? <p className="text-center py-20 text-slate-200 font-black uppercase text-xs tracking-widest">Sin historial previo</p> : 
-                                completedList.map((h, i) => (
-                                    <div key={i} className="relative pl-12 border-l-2 border-slate-100 pb-10 last:pb-0">
-                                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-4 border-white shadow-md" style={{ backgroundColor: theme.primary }}></div>
-                                        <div className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: theme.primary }}>Seguimiento #{h.n}</span>
-                                                <span className="text-[10px] font-bold text-slate-300 italic">{h.fecha}</span>
+                                {completedList.length === 0 ? <p className="text-center py-20 text-slate-200 font-black uppercase text-xs tracking-widest">Sin historial previo</p> :
+                                    completedList.map((h, i) => (
+                                        <div key={i} className="relative pl-12 border-l-2 border-slate-100 pb-10 last:pb-0">
+                                            <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-4 border-white shadow-md" style={{ backgroundColor: theme.primary }}></div>
+                                            <div className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <span className="text-[11px] font-black uppercase tracking-widest" style={{ color: theme.primary }}>Seguimiento #{h.n}</span>
+                                                    <span className="text-[10px] font-bold text-slate-300 italic">{h.fecha}</span>
+                                                </div>
+                                                <p className="text-sm text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{h.nota}</p>
                                             </div>
-                                            <p className="text-sm text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{h.nota}</p>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
                             </div>}
                             {tab === 'new' && <div className="space-y-8 animate-in fade-in duration-300">
                                 <div className="grid grid-cols-2 gap-8">
                                     <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Fecha</label><input disabled type="text" className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-bold opacity-50 text-xs" value={localForm[`Fecha Seguimiento ${nextIdx}`] || ''} /></div>
-                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Próx. Contacto</label><input type="date" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs shadow-inner border-none outline-none" value={toInputDate(localForm['Fecha Próx. Contacto'])} onChange={e => setLocalForm({...localForm, 'Fecha Próx. Contacto': toSheetDate(e.target.value)})} /></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Próx. Contacto</label><input type="date" className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-xs shadow-inner border-none outline-none" value={toInputDate(localForm['Fecha Próx. Contacto'])} onChange={e => setLocalForm({ ...localForm, 'Fecha Próx. Contacto': toSheetDate(e.target.value) })} /></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-8">
-                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nivel de Interés</label><select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={localForm['Nivel de Interés']} onChange={e => setLocalForm({...localForm, 'Nivel de Interés': e.target.value})}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Estado Actual</label><select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={localForm['Estado Final']} onChange={e => setLocalForm({...localForm, 'Estado Final': e.target.value})}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Nivel de Interés</label><select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={localForm['Nivel de Interés']} onChange={e => setLocalForm({ ...localForm, 'Nivel de Interés': e.target.value })}>{INTERES_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                                    <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Estado Actual</label><select className="w-full p-5 rounded-2xl bg-slate-50 font-bold text-xs border-none shadow-inner outline-none cursor-pointer" value={localForm['Estado Final']} onChange={e => setLocalForm({ ...localForm, 'Estado Final': e.target.value })}>{ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}</select></div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Relato de Gestión #{nextIdx}</label>
-                                    <textarea className="w-full p-10 bg-slate-50 rounded-[3rem] font-medium text-sm h-40 border-none shadow-inner outline-none" placeholder="Añade las notas de esta gestión..." value={localForm[`Notas Seguimiento ${nextIdx}`] || ''} onChange={e => setLocalForm({...localForm, [`Notas Seguimiento ${nextIdx}`]: e.target.value})}></textarea>
+                                    <textarea className="w-full p-10 bg-slate-50 rounded-[3rem] font-medium text-sm h-40 border-none shadow-inner outline-none" placeholder="Añade las notas de esta gestión..." value={localForm[`Notas Seguimiento ${nextIdx}`] || ''} onChange={e => setLocalForm({ ...localForm, [`Notas Seguimiento ${nextIdx}`]: e.target.value })}></textarea>
                                 </div>
                                 <div className="p-10 border-2 border-dashed border-slate-200 rounded-[3rem] text-center relative cursor-pointer hover:bg-slate-50 transition-all">
                                     <input multiple type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFiles} />
@@ -723,7 +848,7 @@
                             </div>}
                             {tab === 'notes' && <div className="space-y-4 h-full animate-in fade-in duration-300">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Anotaciones de Auditoría</label>
-                                <textarea className="w-full p-12 bg-slate-50 rounded-[4rem] font-medium text-sm h-full border-none shadow-inner outline-none" placeholder="Notas internas..." value={localForm['Comentarios'] || ''} onChange={e => setLocalForm({...localForm, 'Comentarios': e.target.value})}></textarea>
+                                <textarea className="w-full p-12 bg-slate-50 rounded-[4rem] font-medium text-sm h-full border-none shadow-inner outline-none" placeholder="Notas internas..." value={localForm['Comentarios'] || ''} onChange={e => setLocalForm({ ...localForm, 'Comentarios': e.target.value })}></textarea>
                             </div>}
                         </div>
                         <div className="p-10 bg-slate-50/30 border-t border-slate-50 flex gap-6">
@@ -759,7 +884,7 @@
                         const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/sync-queue');
                         const data = await res.json();
                         setQueue(data);
-                    } catch (e) { 
+                    } catch (e) {
                         const local = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
                         setQueue(local.map(x => ({ sync_id: x.syncId, action: 'Local', timestamp: 'Pendiente' })));
                     }

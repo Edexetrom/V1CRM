@@ -7,6 +7,7 @@ import unicodedata
 import logging
 import sqlite3
 import time
+from googleapiclient.discovery import build
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
@@ -452,5 +453,34 @@ class DataHandler:
             entry = {"t": datetime.now().isoformat(), "act": action, "st": status, "sid": data.get('sync_id'), "name": data.get('Nombre') or data.get('nombre_original')}
             with open(self.journal_path, "a", encoding="utf-8") as f: f.write(json.dumps(entry) + "\n")
         except: pass
+
+
+    # Método crítico para obtener eventos del calendario de una asesora, utilizado para mostrar las próximas citas en la UI. Se conecta a Google Calendar API usando credenciales
+    def get_calendar_events(self, calendar_id):
+            """Consulta el calendario a través del Script Puente de Google con Debug."""
+            print(f"DEBUG: Intentando conectar al Script para el calendario: {calendar_id}")
+            try:
+                payload = {
+                    "action": "getCalendar",
+                    "calendarId": calendar_id
+                }
+                # Reutilizamos la SCRIPT_URL
+                response = requests.post(self.SCRIPT_URL, json=payload, timeout=15)
+               
+                print(f"DEBUG: Status Code del Script: {response.status_code}")
+                res_data = response.json()
+                print(f"DEBUG: Respuesta completa del Script: {res_data}")
+               
+                if res_data.get('status') == 'success':
+                    events = res_data.get('events', [])
+                    print(f"DEBUG: Se encontraron {len(events)} eventos.")
+                    return events
+                else:
+                    print(f"DEBUG: Error devuelto por el Script: {res_data.get('message')}")
+                    return []
+            except Exception as e:
+                print(f"DEBUG: Error crítico en la petición: {e}")
+                return []
+
 
 handler = DataHandler()
