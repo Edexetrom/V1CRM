@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory, abort
 from flask_cors import CORS
 from data_handler import DataHandler
 import logging
@@ -308,6 +308,32 @@ def get_my_calendar():
         print(f"DEBUG APP ERROR CRÍTICO: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+# Obtenemos la ruta absoluta de la carpeta donde vive este archivo app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+@app.route('/')
+def index():
+    path_completo = os.path.join(BASE_DIR, 'index.html')
+    
+    # --- BLOQUE DE DIAGNÓSTICO ---
+    print(f"\n--- VERIFICACIÓN DE ARCHIVO ---")
+    print(f"Buscando en: {path_completo}")
+    
+    if os.path.exists(path_completo):
+        print("✅ ARCHIVO ENCONTRADO")
+        return send_from_directory(BASE_DIR, 'index.html')
+    else:
+        print("❌ ERROR: El archivo index.html NO EXISTE en esa carpeta.")
+        print(f"Archivos presentes en la carpeta: {os.listdir(BASE_DIR)}")
+        # En lugar de romper (error 500), devolvemos un error 404 claro
+        return f"Error: No se encontró index.html en {BASE_DIR}. Revisa la consola de Python.", 404
+
+@app.route('/js/<path:filename>')
+def serve_js(filename):
+    # Buscamos los archivos dentro de la carpeta /js usando la ruta absoluta
+    js_path = os.path.join(BASE_DIR, 'js')
+    return send_from_directory(js_path, filename)
 if __name__ == '__main__':
     logger.info("Iniciando Servidor Flask CRM Handshake v10.3...")
     app.run(host='0.0.0.0', debug=True, port=5000)
