@@ -18,9 +18,8 @@ COPY server.js .
 # DEBEN estar dentro de la carpeta /Node en tu repositorio de GitHub.
 # Si están en la raíz del proyecto, el build fallará o no los encontrará.
 
-COPY index.html ./
-COPY audit.html ./
-COPY js/ ./js/
+COPY index.html ./index.html
+COPY audit.html ./audit.html
 
 # Exponer el puerto 80
 EXPOSE 80
