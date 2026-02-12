@@ -245,69 +245,6 @@ def download_db():
         return send_file(handler.db_path, as_attachment=True)
     return "Base de datos no encontrada.", 404
 
-
-# --- ENDPOINTS DE CALENDARIO ---
-@app.route('/api/my-calendar', methods=['POST'])
-def get_my_calendar():
-    try:
-        data = request.json
-        agent_name = data.get('asesora', '').strip().lower()
-        
-        print(f"\n--- INICIO PETICIÓN CALENDARIO ---")
-        print(f"DEBUG APP: Buscando a: '{agent_name}'")
-        
-        ws = handler.workbook.worksheet("AsesorasActivas")
-        # Obtenemos los encabezados reales del Excel
-        headers = ws.row_values(1)
-        print(f"DEBUG APP: Encabezados detectados en Excel: {headers}")
-        
-        # Buscamos en qué posición están las columnas necesarias
-        col_nombre_idx = -1
-        col_calendar_idx = -1
-        
-        for i, h in enumerate(headers):
-            norm_h = handler._normalize(h) # Usamos el normalizador de tu handler
-            if norm_h in ['nombre', 'asesora']:
-                col_nombre_idx = i
-            if norm_h in ['idcalendario', 'calendarioid', 'id_calendario']:
-                col_calendar_idx = i
-
-        if col_nombre_idx == -1:
-            print("DEBUG APP ERROR: No encontré ninguna columna que se llame 'Nombre' o 'Asesora'")
-            return jsonify({"error": "Estructura de Excel inválida (Falta columna Nombre)"}), 500
-
-        # Buscamos la fila de la asesora manualmente por índice
-        records = ws.get_all_values()[1:] # Saltamos encabezados
-        agent_row = None
-        
-        for row in records:
-            if len(row) > col_nombre_idx:
-                val_nombre = str(row[col_nombre_idx]).strip().lower()
-                if val_nombre == agent_name:
-                    agent_row = row
-                    break
-        
-        if not agent_row:
-            print(f"DEBUG APP: No se encontró a '{agent_name}' en los datos de las filas.")
-            return jsonify({"error": f"Asesora '{agent_name}' no hallada"}), 404
-            
-        # Extraemos el ID del calendario
-        calendar_id = ""
-        if col_calendar_idx != -1 and len(agent_row) > col_calendar_idx:
-            calendar_id = str(agent_row[col_calendar_idx]).strip()
-
-        if not calendar_id or calendar_id.lower() == 'none':
-            print(f"DEBUG APP: '{agent_name}' encontrada, pero su celda de ID_Calendario está vacía.")
-            return jsonify([])
-            
-        print(f"DEBUG APP: ¡Éxito! Conectando calendario: '{calendar_id}'")
-        events = handler.get_calendar_events(calendar_id)
-        return jsonify(events)
-        
-    except Exception as e:
-        print(f"DEBUG APP ERROR CRÍTICO: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
 if __name__ == '__main__':
     logger.info("Iniciando Servidor Flask CRM Handshake v10.3...")
     app.run(host='0.0.0.0', debug=True, port=5000)
