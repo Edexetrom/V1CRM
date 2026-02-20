@@ -307,10 +307,12 @@
             const handleDownloadDB = () => window.location.href = 'https://crmasesorasapi.libresdeumas.com/api/download-db';
 
             const getRendimiento = (client) => {
+                let hasHistory = false;
                 for (let i = 30; i >= 1; i--) {
                     const fechaGestion = client[`Fecha Seguimiento ${i}`] || client[`fecha_seguimiento_${i}`];
                     const nota = client[`Notas Seguimiento ${i}`] || client[`notas_seguimiento_${i}`];
                     if (fechaGestion && nota) {
+                        hasHistory = true;
                         const match = nota.match(/(?:Cita anterior programada para|Fecha contacto anterior):\s*(\d{2}\/\d{2}\/\d{4})/i);
                         if (match) {
                             try {
@@ -330,6 +332,29 @@
                             } catch (e) { }
                         }
                         break;
+                    }
+                }
+
+                const estado = client['Estado Final'] || client['Estado'];
+                if (!hasHistory && (estado === 'Venta' || estado === 'No interesado')) {
+                    const registroStr = client['Fecha 1er Contacto'];
+                    const citaStr = client['Fecha Próx. Contacto'];
+                    if (registroStr && citaStr && citaStr !== '--') {
+                        try {
+                            const [d1, m1, y1] = registroStr.split('/').map(Number);
+                            const regDate = new Date(y1, m1 - 1, d1);
+                            regDate.setHours(0, 0, 0, 0);
+
+                            const [d2, m2, y2] = citaStr.split('/').map(Number);
+                            const citaDate = new Date(y2, m2 - 1, d2);
+                            citaDate.setHours(0, 0, 0, 0);
+
+                            const diffDays = Math.floor((regDate - citaDate) / (1000 * 60 * 60 * 24));
+
+                            if (diffDays <= 0) return { label: 'En tiempo', class: 'perf-en-tiempo', hex: '#059669' };
+                            if (diffDays <= 1) return { label: 'Retraso', class: 'perf-retraso', hex: '#f59e0b' };
+                            return { label: 'Acción Necesaria', class: 'perf-accion', hex: '#dc2626' };
+                        } catch (e) { }
                     }
                 }
 
