@@ -224,6 +224,33 @@ class DataHandler:
             return True, "Ok"
         except: return False, "Error"
 
+    def edit_client_field_db(self, canal, field, new_value):
+        try:
+            clean_canal = "".join(filter(str.isdigit, str(canal)))[-10:]
+            id_unico = f"ID_{clean_canal}"
+            sync_id = f"EDIT_{int(time.time())}_{clean_canal}"
+            conn = self._get_conn()
+            cursor = conn.cursor()
+            
+            if field == 'nombre':
+                cursor.execute("UPDATE prospectos SET nombre = ?, validacion = 'PENDIENTE', updated_at = CURRENT_TIMESTAMP WHERE id_unico = ?", (new_value, id_unico))
+            elif field == 'canal':
+                new_clean_canal = "".join(filter(str.isdigit, str(new_value)))[-10:]
+                new_id_unico = f"ID_{new_clean_canal}"
+                cursor.execute("UPDATE prospectos SET canal = ?, id_unico = ?, validacion = 'PENDIENTE', updated_at = CURRENT_TIMESTAMP WHERE id_unico = ?", (new_value, new_id_unico, id_unico))
+            elif field == 'resumen':
+                cursor.execute("UPDATE prospectos SET resumen = ?, validacion = 'PENDIENTE', updated_at = CURRENT_TIMESTAMP WHERE id_unico = ?", (new_value, id_unico))
+            else:
+                return False, "Campo no soportado localmente"
+
+            payload = {"canal": canal, "field": field, "new_value": new_value, "sync_id": sync_id}
+            cursor.execute('INSERT INTO sync_queue (sync_id, type, phone_id, payload) VALUES (?, ?, ?, ?)', 
+                           (sync_id, "EDIT_FIELD", id_unico, json.dumps(payload)))
+            conn.commit(); conn.close()
+            return True, "Ok"
+        except Exception as e:
+            return False, str(e)
+
     def enqueue_client_data(self, action_type, data):
         sync_id = data.get('sync_id') or f"AUTO_{int(time.time())}"
         data['sync_id'] = sync_id
@@ -342,6 +369,16 @@ class DataHandler:
                 if cell:
                     col_n = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == 'nombre'), 1)
                     ws.update_cell(cell.row, col_n, data.get('new_name'))
+                return True, "Ok", None
+
+            if q_type == "EDIT_FIELD":
+                cell = ws.find("".join(filter(str.isdigit, str(data.get('canal'))))[-10:])
+                if cell:
+                    field = data.get('field')
+                    sheet_header_name = self.FIELD_MAP.get(field, field)
+                    col_i = next((i+1 for i, h in enumerate(headers) if self._normalize(h) == self._normalize(sheet_header_name)), None)
+                    if col_i:
+                        ws.update_cell(cell.row, col_i, str(data.get('new_value')))
                 return True, "Ok", None
 
             prefix = "evidencia"
