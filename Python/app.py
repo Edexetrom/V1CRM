@@ -182,6 +182,26 @@ def rename_client():
         logger.error(f"Error en rename_client: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/edit-client-field', methods=['POST', 'OPTIONS'])
+def edit_client_field():
+    """Endpoint genérico para que roles Superior modifiquen campos desde Auditoría."""
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+    try:
+        data = request.json
+        canal = data.get('canal')
+        field = data.get('field')
+        new_value = data.get('new_value')
+        
+        if not canal or not field or new_value is None:
+            return jsonify({"status": "error", "message": "Datos incompletos para edición."}), 400
+            
+        success, message = handler.edit_client_field_db(canal, field, new_value)
+        return jsonify({"status": "success" if success else "error", "message": message})
+    except Exception as e:
+        logger.error(f"Error en edit_client_field: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/delete-client', methods=['POST', 'OPTIONS'])
 def delete_client():
     """Nuevo endpoint para borrado espejo (SQLite + Sheets + Drive)."""
