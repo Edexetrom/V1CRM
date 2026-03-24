@@ -1,15 +1,29 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from data_handler import handler
+import threading  # LÍNEA AGREGADA: Permite el uso de hilos para procesos de fondo
 import logging
 
 # Configuración de logs para ver el flujo en la terminal
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger("CerebroServer")
 
 app = Flask(__name__)
 # Configuración CORS global para permitir la comunicación con los archivos HTML
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+def background_sync(action_type, data):
+    """
+    Función que se ejecuta en un hilo separado.
+    Sincroniza los datos con la hoja de Google Sheets "AsesorasActivas" o la principal.
+    """
+    try:
+        logger.info(f"Worker: Iniciando sincronización de fondo para {data.get('Nombre')}")
+        # Llamada al método de sincronización en el módulo de sheets
+        sheets_sync.sincronizar_prospecto_a_sheet(data)
+        logger.info(f"Worker: Sincronización finalizada exitosamente.")
+    except Exception as e:
+        logger.error(f"Worker Error: No se pudo completar la sincronización: {e}")
 
 @app.route('/api/my-calendar', methods=['POST', 'OPTIONS'])
 def get_my_calendar():
@@ -98,34 +112,43 @@ def delete_client():
         return jsonify({"status": "success" if success else "error", "message": message})
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/api/add-client', methods=['POST'])
+@app.route('/api/add-client', methods=['POST', 'OPTIONS'])
 def add_client():
     """
-    Registro de prospecto con descarte inmediato de duplicados.
-    Evita que el registro entre en la cola de sincronización.
+    Endpoint para registrar un nuevo prospecto.
+    1. Valida duplicados (DataHandler v4.5).
+    2. Registra en Supabase.
+    3. Dispara hilo de fondo para Google Sheets si todo es correcto.
     """
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+        
     try:
         data = request.json
         
-        # Llamada al handler que ahora realiza la verificación preventiva
+        # El handler realiza la verificación preventiva de duplicados y subida a Drive
         result = handler.registrar_prospecto(data)
         
-        # Si el handler detecta un duplicado, NO disparamos el hilo de sincronización
+        # Si es duplicado, el handler devuelve status 'duplicate'
         if result.get('status') == 'duplicate':
-            logger.info(f"API: Duplicado detectado para {data.get('Canal')}. Sincronización anulada.")
+            logger.info(f"API: Duplicado detectado para {data.get('Canal')}. Operación abortada.")
             return jsonify(result), 409
             
-        # Solo si el registro fue exitoso en Supabase, sincronizamos con Google Sheets
+        # Si el registro fue exitoso en Supabase
         if result.get('status') == 'success':
-            logger.info(f"API: Iniciando hilo de sincronización para {data.get('Nombre')}")
-            threading.Thread(target=background_sync, args=("ADD", data)).start()
+            logger.info(f"API: Registro exitoso en DB. Disparando hilo de sincronización.")
+            
+            # DISPARO DE HILO: Aquí es donde fallaba antes por la falta del import
+            thread = threading.Thread(target=background_sync, args=("ADD", data))
+            thread.start()
+            
             return jsonify(result), 201
         
-        # Otros errores (400 Bad Request)
+        # Otros errores de validación
         return jsonify(result), 400
         
     except Exception as e:
-        logger.error(f"Error en endpoint add-client: {e}")
+        logger.error(f"Error crítico en add-client: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/clients', methods=['GET'])
