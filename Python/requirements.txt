@@ -8,3 +8,4 @@ gunicorn==21.2.0
 psycopg2-binary==2.9.9
 gspread==5.10.0
 google-api-python-client==2.95.0
+supabase

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CRM Profesional - Versión 6.2 (Trazabilidad Silenciosa)</title>
+    <title>CRM Profesional - Versión 6.2.1 (Estabilización de Duplicados)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -218,7 +218,7 @@
             const [currentPage, setCurrentPage] = useState(1);
             const [calendarEvents, setCalendarEvents] = useState([]);
             const [loadingCalendar, setLoadingCalendar] = useState(false);
-            const [showCalendar, setShowCalendar] = useState(false); // Control de despliegue
+            const [showCalendar, setShowCalendar] = useState(false);
 
             const isSyncing = useRef(false);
             const entriesPerPage = 15;
@@ -245,7 +245,6 @@
                 } catch (e) { console.error(e); }
             };
 
-
             const fetchClients = async (name) => {
                 setLoading(true);
                 try {
@@ -257,7 +256,6 @@
                 } catch (e) { console.error(e); }
                 setLoading(false);
             };
-
 
             const fetchMyCalendar = async () => {
                 if (!showCalendar) {
@@ -272,16 +270,11 @@
                             });
                             const data = await res.json();
                             setCalendarEvents(Array.isArray(data) ? data : []);
-                        } catch (err) {
-                            console.error("Error al cargar calendario maestro");
-                        }
+                        } catch (err) { console.error("Error al cargar calendario maestro"); }
                         setLoadingCalendar(false);
                     }
-                } else {
-                    setShowCalendar(false);
-                }
+                } else { setShowCalendar(false); }
             };
-
 
             const processQueue = async () => {
                 if (isSyncing.current) return;
@@ -302,7 +295,7 @@
                             body: JSON.stringify(item.payload)
                         });
                         const data = await res.json();
-                        if (data.status === 'success' || data.message?.includes('ya existe')) {
+                        if (data.status === 'success' || data.message?.includes('ya existe') || res.status === 409) {
                             newQueue.splice(i, 1);
                             i--;
                             changed = true;
@@ -358,7 +351,6 @@
 
             const totalPages = Math.max(1, Math.ceil(filteredClients.length / entriesPerPage));
 
-            // ARREGLO DE LOGIN: Implementación correcta de handleLogin utilizando el estado del componente
             const handleLogin = async (name, password) => {
                 setLoading(true);
                 try {
@@ -369,7 +361,6 @@
                     });
                     const data = await res.json();
                     if (data.status === 'success') {
-                        // Guardamos y actualizamos estado
                         localStorage.setItem('crm_user', data.nombre);
                         setUser(data.nombre);
                         fetchClients(data.nombre);
@@ -438,13 +429,8 @@
                             </button>
                         </div>
 
-
-                        {/* MÓDULO DE AGENDA MAESTRA DESPLEGABLE */}
                         <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                            <div
-                                onClick={fetchMyCalendar}
-                                className="glass p-6 rounded-[2.5rem] border border-white shadow-sm flex items-center justify-between cursor-pointer hover:bg-white/50 transition-all"
-                            >
+                            <div onClick={fetchMyCalendar} className="glass p-6 rounded-[2.5rem] border border-white shadow-sm flex items-center justify-between cursor-pointer hover:bg-white/50 transition-all">
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md" style={{ backgroundColor: activeTheme.primary }}>
                                         <i className={`fas ${showCalendar ? 'fa-calendar-minus' : 'fa-calendar-alt'} text-sm`}></i>
@@ -460,7 +446,6 @@
                                 </div>
                             </div>
 
-                            {/* PANEL EXPANDIBLE */}
                             {showCalendar && (
                                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in zoom-in-95 duration-300">
                                     {calendarEvents.length === 0 && !loadingCalendar ? (
@@ -475,20 +460,15 @@
                                                     <i className="far fa-clock text-slate-200 text-[10px]"></i>
                                                 </div>
                                                 <p className="text-[10px] text-slate-400 font-bold italic mb-2">
-                                                    {new Date(ev.start).toLocaleString('es-MX', {
-                                                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-                                                    })}
+                                                    {new Date(ev.start).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                                 </p>
-                                                {ev.description && (
-                                                    <p className="text-[9px] text-slate-400 line-clamp-2 border-t border-slate-50 pt-2 mt-2">{ev.description}</p>
-                                                )}
+                                                {ev.description && (<p className="text-[9px] text-slate-400 line-clamp-2 border-t border-slate-50 pt-2 mt-2">{ev.description}</p>)}
                                             </div>
                                         ))
                                     )}
                                 </div>
                             )}
                         </div>
-
 
                         <div className="glass rounded-[3rem] shadow-2xl overflow-hidden border border-white">
                             <div className="overflow-x-auto custom-scroll">
@@ -512,8 +492,7 @@
                                                 </td>
                                                 <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{c.Canal || '--'}</td>
                                                 <td className="px-8 py-5">
-                                                    <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${(c['Nivel de Interés'] || '').includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
-                                                        }`}>{(c['Nivel de Interés'] || '').split(' <')[0] || 'N/A'}</span>
+                                                    <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-tighter ${(c['Nivel de Interés'] || '').includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>{(c['Nivel de Interés'] || '').split(' <')[0] || 'N/A'}</span>
                                                 </td>
                                                 <td className={`px-8 py-5 text-[11px] font-black ${(() => {
                                                     if (!c['Fecha Próx. Contacto'] || c['Fecha Próx. Contacto'] === '--') return 'text-slate-300';
@@ -523,13 +502,9 @@
                                                     if (pDate < nowMx) return 'text-red-500';
                                                     if (pDate.getTime() === nowMx.getTime()) return 'text-orange-500';
                                                     return 'text-sky-500';
-                                                })()}`}>
-                                                    {c['Fecha Próx. Contacto'] || '--'}
-                                                </td>
+                                                })()}`}> {c['Fecha Próx. Contacto'] || '--'} </td>
                                                 <td className="px-8 py-5">
-                                                    <span className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                        c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                                        }`}>{c['Estado Final']}</span>
+                                                    <span className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' : c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{c['Estado Final']}</span>
                                                 </td>
                                                 <td className="px-8 py-5 text-right pr-12">
                                                     <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center ml-auto hover:bg-sky-50 hover:text-sky-600 transition-all border border-slate-100">
@@ -638,12 +613,30 @@
                         body: JSON.stringify(payload)
                     });
                     const data = await res.json();
+
+                    // --- AJUSTE SOLICITADO: CAPTURA DE SEÑAL DE TELÉFONO DUPLICADO ---
+                    if (res.status === 409) {
+                        setStatus({
+                            type: 'error',
+                            title: 'Número Duplicado',
+                            message: data.message || "Este número de teléfono ya le pertenece a otra persona."
+                        });
+                        setSending(false);
+                        // Quitamos de la cola ya que el servidor rechazó por validación de negocio
+                        const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]').filter(x => x.syncId !== syncId);
+                        localStorage.setItem('crm_sync_queue', JSON.stringify(q));
+                        onQueueChange(q.length);
+                        return; // Detener flujo sin cerrar modal ni limpiar formulario
+                    }
+
                     if (data.status === 'success' || data.message?.includes('ya existe')) {
                         const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]').filter(x => x.syncId !== syncId);
                         localStorage.setItem('crm_sync_queue', JSON.stringify(q));
                         onQueueChange(q.length);
                         setStatus({ type: 'success', title: 'Éxito', message: "Expediente guardado en Base Local.", data: form });
                         onRefresh(); onClose();
+                    } else {
+                        setStatus({ type: 'error', title: 'Error', message: data.message || "No se pudo registrar." });
                     }
                 } catch (err) {
                     setStatus({ type: 'error', title: 'Modo Offline', message: "Guardado en cola de sincronización.", data: form });
@@ -720,7 +713,6 @@
                 return 31;
             }, [client]);
 
-            // EFECTO DE TRAZABILIDAD: Pre-llenado de fecha únicamente
             useEffect(() => {
                 if (tab === 'new' && nextIdx <= 30 && (!localForm[`Notas Seguimiento ${nextIdx}`] || localForm[`Notas Seguimiento ${nextIdx}`] === '')) {
                     setLocalForm(prev => ({
