@@ -257,7 +257,7 @@
             const fetchPool = async () => {
                 setPoolLoading(true);
                 try {
-                    const res = await fetch('http://localhost:5000/api/pool');
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool');
                     const data = await res.json();
                     setPoolData(data || []);
                 } catch (e) { console.error(e); }
@@ -266,7 +266,7 @@
 
             const takePool = async (lead_id) => {
                 try {
-                    const res = await fetch('http://localhost:5000/api/pool/take', {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/take', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ lead_id, nombre_asesora: user })
@@ -305,7 +305,7 @@
                     setPoolLoading(true);
                     for (let id of selectedIds) {
                         try {
-                            await fetch('http://localhost:5000/api/pool/take', {
+                            await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/take', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ lead_id: id, nombre_asesora: user })
@@ -438,7 +438,7 @@
 
             const fetchAgents = async () => {
                 try {
-                    const res = await fetch('http://localhost:5000/api/agents');
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents');
                     const data = await res.json();
                     if (Array.isArray(data)) setAgents(data);
                 } catch (e) { console.error(e); }
@@ -447,7 +447,7 @@
             const fetchClients = async (name, silent = false) => {
                 if (!silent) setLoading(true);
                 try {
-                    const res = await fetch(`http://localhost:5000/api/clients?asesora=${encodeURIComponent(name)}&t=${Date.now()}`);
+                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${encodeURIComponent(name)}&t=${Date.now()}`);
                     const data = await res.json();
                     if (Array.isArray(data)) {
                         setClients(data.map(normalizeData));
@@ -459,7 +459,7 @@
             const handleSelectClient = async (id_db) => {
                 setLoading(true);
                 try {
-                    const res = await fetch(`http://localhost:5000/api/client-details?id=${id_db}`);
+                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/client-details?id=${id_db}`);
                     const fullData = await res.json();
                     if (fullData) {
                         setSelectedClient(normalizeData(fullData));
@@ -475,7 +475,7 @@
                     if (calendarEvents.length === 0) {
                         setLoadingCalendar(true);
                         try {
-                            const res = await fetch('http://localhost:5000/api/my-calendar', {
+                            const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/my-calendar', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ asesora: user })
@@ -566,7 +566,7 @@
             const handleLogin = async (name, password) => {
                 setLoading(true);
                 try {
-                    const res = await fetch('http://localhost:5000/api/login', {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nombre: name.trim(), password: password.trim() })
@@ -800,7 +800,7 @@
             const handleResolve = async (accion) => {
                 setLoading(true);
                 try {
-                    const res = await fetch('http://localhost:5000/api/pool/resolve', {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/resolve', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ lead_id: client.folio_i, nombre_asesora: user, accion, datos_validacion: checkString })
                     });
@@ -893,12 +893,12 @@
                 };
 
                 const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
-                queue.push({ syncId, endpoint: 'http://localhost:5000/api/add-client', payload });
+                queue.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/add-client', payload });
                 localStorage.setItem('crm_sync_queue', JSON.stringify(queue));
                 onQueueChange(queue.length);
 
                 try {
-                    const res = await fetch('http://localhost:5000/api/add-client', {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/add-client', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
@@ -1050,12 +1050,12 @@
                 }
                 const payload = { p_id: client.id_db, nombre_original: client.Nombre, updates, sync_id: syncId, files_payload: newPhotos, etapa: 'seguimiento' };
                 const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
-                q.push({ syncId, endpoint: 'http://localhost:5000/api/update-client-advanced', payload });
+                q.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', payload });
                 localStorage.setItem('crm_sync_queue', JSON.stringify(q));
                 onQueueChange(q.length);
 
                 try {
-                    const res = await fetch('http://localhost:5000/api/update-client-advanced', {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/update-client-advanced', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
@@ -1174,7 +1174,7 @@
             useEffect(() => {
                 const fetchQueue = async () => {
                     try {
-                        const res = await fetch('http://localhost:5000/api/sync-queue');
+                        const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/sync-queue');
                         const data = await res.json();
                         setQueue(data);
                     } catch (e) {
