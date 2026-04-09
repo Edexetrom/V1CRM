@@ -5,12 +5,12 @@ import json
 import base64
 import gspread
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import re
-
+import pytz
 # Carga de variables de entorno
 load_dotenv()
 
@@ -189,6 +189,17 @@ class DataHandler:
                 res_drive = self.sheets.subir_evidencia_drive(datos.get('Nombre'), files[0]['base64Data'], nombre_archivo)
                 drive_url = res_drive.get('folderUrl', "")
             
+            tz_mex = pytz.timezone('America/Mexico_City')
+            fecha_prox = datos.get('Fecha Próx. Contacto')
+            rendimiento = "Sin Cita"
+            if fecha_prox and fecha_prox != '--':
+                try:
+                    fp = datetime.strptime(str(fecha_prox), "%d/%m/%Y").date()
+                    now_mx = datetime.now(tz_mex).date()
+                    if fp >= now_mx: rendimiento = "AL DIA"
+                    else: rendimiento = "VENCIDO"
+                except: pass
+            
             payload = {
                 "canal": canal_num, 
                 "nombre": datos.get('Nombre'),
@@ -199,7 +210,8 @@ class DataHandler:
                 "fecha_registro": self._formatear_fecha_sql(datos.get('Fecha 1er Contacto')),
                 "fecha_proxima": self._formatear_fecha_sql(datos.get('Fecha Próx. Contacto')),
                 "imagenes_url": drive_url, 
-                "updated_at": datetime.now().isoformat()
+                "updated_at": datetime.now(tz_mex).isoformat(),
+                "rendimiento": rendimiento
             }
             
             self.supabase.table("prospectos").insert(payload).execute()
@@ -234,35 +246,61 @@ class DataHandler:
         except Exception as e:
             logger.error(f"HILO FONDO ERROR: No se subió archivo para '{nombre_original}' -> {e}")
 
-    def actualizar_prospecto_avanzado(self, nombre_original, updates, files_payload=None):
+    def actualizar_prospecto_avanzado(self, p_id, updates, files_payload=None):
         try:
-            p_res = self.supabase.table("prospectos").select("id, canal").eq("nombre", nombre_original).execute()
-            if not p_res.data: return {"status": "error", "message": "No encontrado."}
-            p_id, p_canal = p_res.data[0]['id'], p_res.data[0]['canal']
+            p_res = self.supabase.table("prospectos").select("id, canal, fecha_proxima, estado_final").eq("id", p_id).execute()
+            if not p_res.data: return {"status": "error", "message": "Registro no encontrado usando ID principal."}
+            
+            estado_actual = p_res.data[0].get('estado_final')
+            if estado_actual in ["Venta", "No interesado"]:
+                return {"status": "error", "message": f"Seguridad: El prospecto ya está como '{estado_actual}' y no puede ser modificado."}
+            
+            p_canal = p_res.data[0]['canal']
+            fecha_ant_db = p_res.data[0].get('fecha_proxima')
+            fecha_ant_str = self._formatear_fecha_ui(fecha_ant_db) if fecha_ant_db else "Sin cita previa"
+            
+            tz_mex = pytz.timezone('America/Mexico_City')
+            now_mx = datetime.now(tz_mex).date()
+            rendimiento_str = "Sin Cita"
+            if fecha_ant_db:
+                try:
+                    date_db = datetime.strptime(str(fecha_ant_db), "%Y-%m-%d").date()
+                    diff = (now_mx - date_db).days
+                    if diff <= 0: rendimiento_str = "AL DIA"
+                    elif diff == 1: rendimiento_str = "ALERTA"
+                    else: rendimiento_str = "VENCIDO"
+                except: pass
+            
             num_seg = "Gral"
             for k in updates.keys():
                 if "Notas Seguimiento" in k:
                     try: num_seg = k.split(" ")[-1]; break
                     except: pass
+                    
             maestro_payload = {
                 "estado_final": updates.get('Estado Final'), "nivel_interes": updates.get('Nivel de Interés'),
                 "fecha_proxima": self._formatear_fecha_sql(updates.get('Fecha Próx. Contacto')),
-                "comentarios": updates.get('Comentarios'), "updated_at": datetime.now().isoformat()
+                "comentarios": updates.get('Comentarios'), "updated_at": datetime.now(tz_mex).isoformat(),
+                "rendimiento": rendimiento_str
             }
             # Se ha removido la lógica síncrona de subida de Drive aquí, favoreciendo la BD
             self.supabase.table("prospectos").update(maestro_payload).eq("id", p_id).execute()
+            
             for key, val in updates.items():
                 if "Notas Seguimiento" in key and val:
                     try:
                         num_paso = int(key.split(" ")[-1])
                         fecha_seg = updates.get(f"Fecha Seguimiento {num_paso}")
+                        nota_modificada = f"Cita anterior programada: {fecha_ant_str}\n{val}"
                         seg_payload = {
                             "prospecto_id": p_id, "prospecto_canal": p_canal,
                             "numero_paso": num_paso, "fecha_seguimiento": self._formatear_fecha_sql(fecha_seg),
-                            "nota_seguimiento": val, "created_at": datetime.now().isoformat()
+                            "nota_seguimiento": nota_modificada, "created_at": datetime.now(tz_mex).isoformat()
                         }
                         self.supabase.table("seguimientos").insert(seg_payload).execute()
-                    except: pass
+                    except Exception as e:
+                        logger.error(f"Fallo al insertar seguimiento #{num_paso} para prospecto {p_id}: {e}")
+                        return {"status": "error", "message": f"Fallo al registrar seguimiento #{num_paso}. Puede que ya exista o haya conflicto."}
             
             # Retornamos p_id y num_seg para que si se requiere subida a drive, el app.py tenga la información necesaria
             return {"status": "success", "message": "Expediente sincronizado.", "p_id": p_id, "num_seg": num_seg}
@@ -287,7 +325,7 @@ class DataHandler:
         try:
             while True:
                 res = self.supabase.table("prospectos") \
-                    .select("*, seguimientos!seguimientos_prospecto_id_fkey(*)", count='exact') \
+                    .select("id, nombre, canal, nivel_interes, fecha_proxima, fecha_registro, estado_final, asesora, rendimiento, seguimientos!seguimientos_prospecto_id_fkey(*)", count='exact') \
                     .order("updated_at", desc=True) \
                     .range(offset, offset + limit - 1).execute()
                 batch = res.data
@@ -298,11 +336,37 @@ class DataHandler:
             return all_data
         except: return []
 
+    def get_client_full_profile(self, p_id):
+        try:
+            res = self.supabase.table("prospectos").select("*, seguimientos!seguimientos_prospecto_id_fkey(*)").eq("id", p_id).execute()
+            if not res.data: return None
+            return self._reconstruir_objeto_prospecto(res.data[0])
+        except: return None
+
     def _reconstruir_objeto_prospecto(self, p):
+        p['id_db'] = p.get('id')
         p['nombre'] = p.get('nombre') or "Sin Nombre"
         p['fecha_registro'] = self._formatear_fecha_ui(p.get('fecha_registro'))
-        p['fecha_proxima'] = self._formatear_fecha_ui(p.get('fecha_proxima'))
-        p['Imagenes'] = p.get('imagenes_url') or ""
+        
+        fp_db = p.get('fecha_proxima')
+        p['fecha_proxima'] = self._formatear_fecha_ui(fp_db)
+        
+        rend = p.get('rendimiento')
+        if not rend or rend == "Sin Cita":
+            rend = "Sin Cita"
+            if fp_db:
+                try:
+                    fp = datetime.strptime(str(fp_db), "%Y-%m-%d").date()
+                    now_mx = datetime.now(pytz.timezone('America/Mexico_City')).date()
+                    diff = (now_mx - fp).days
+                    if diff <= 0: rend = "AL DIA"
+                    elif diff == 1: rend = "ALERTA"
+                    else: rend = "VENCIDO"
+                except: pass
+        p['rendimiento'] = rend
+        
+        if 'imagenes_url' in p:
+            p['Imagenes'] = p.get('imagenes_url') or ""
         segs = p.get('seguimientos!seguimientos_prospecto_id_fkey') or p.get('seguimientos') or []
         segs.sort(key=lambda x: x.get('numero_paso', 0))
         for s in segs:
@@ -368,9 +432,161 @@ class DataHandler:
 
     def get_clients_for_agent(self, agent_name):
         try:
-            res = self.supabase.table("prospectos").select("*, seguimientos!seguimientos_prospecto_id_fkey(*)").ilike("asesora", f"%{agent_name}%").order("updated_at", desc=True).execute()
+            res = self.supabase.table("prospectos").select("id, nombre, canal, nivel_interes, fecha_proxima, fecha_registro, estado_final, asesora, rendimiento, seguimientos!seguimientos_prospecto_id_fkey(*)").ilike("asesora", f"%{agent_name}%").order("updated_at", desc=True).execute()
             return [self._reconstruir_objeto_prospecto(item) for item in res.data]
         except: return []
+
+    # --- INICIO MÓDULO POOL ---
+    def get_pool_clients(self):
+        try:
+            # 1. Establecer hora actual en base a timezone local
+            tz_mex = pytz.timezone('America/Mexico_City')
+            now_mx = datetime.now(tz_mex)
+            
+            offset = 0
+            limit = 1000
+            all_data = []
+            
+            # Se hace el query sin created_at para evitar el error column AGENDA_OBSOLETA.created_at does not exist
+            while True:
+                res = self.supabase.table("AGENDA_OBSOLETA").select("folio_i, telefono, status, hora, fecha, updated, updated_at").order("updated_at", desc=True).range(offset, offset + limit - 1).execute()
+                if not res.data: break
+                all_data.extend(res.data)
+                if len(res.data) < limit: break
+                offset += limit
+                
+            if not all_data: return []
+            pool = []
+            for item in all_data:
+                st = item.get('status') or ''
+                valid = False
+                
+                if st in ['', 'NSH', 'LIBRE'] or st is None:
+                    # 2. EVALUACIÓN DE ANTIGÜEDAD (Regla 3 días usando la columna 'fecha')
+                    fecha_str = item.get('fecha')
+                    
+                    if fecha_str:
+                        try:
+                            # Parsear la fecha soportando formatos convencionales YYYY-MM-DD o DD/MM/YYYY
+                            fecha_str_clean = str(fecha_str).strip()[:10]
+                            if '-' in fecha_str_clean:
+                                dt_fecha = datetime.strptime(fecha_str_clean, "%Y-%m-%d").date()
+                            elif '/' in fecha_str_clean:
+                                dt_fecha = datetime.strptime(fecha_str_clean, "%d/%m/%Y").date()
+                            else:
+                                dt_fecha = now_mx.date() # Fallback
+                                
+                            # 3. Calcular la diferencia exacta de días contra el hoy en CDMX
+                            diff_days = (now_mx.date() - dt_fecha).days
+                            
+                            # Si tiene 3 días o más de antigüedad, se libera al Pool público
+                            if diff_days >= 3:
+                                valid = True
+                            else:
+                                valid = False
+                        except Exception as e:
+                            # Por seguridad, si falla el parseo, omitirlo (valid = False) 
+                            valid = False
+                    else:
+                        # Si no hay forma de saber cuándo se creó, lo omitimos
+                        valid = False
+
+                elif st.startswith('BLOQUEADO_'):
+                    # Siempre debe ser True para que el registro viaje al frontend y aparezca en Mis Reclamados
+                    valid = True
+                    up = item.get('updated_at')
+                    if up:
+                        try:
+                            dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
+                            if not dt.tzinfo:
+                                dt = tz_mex.localize(dt)
+                            diff = (now_mx - dt).days
+                            if diff > 5:
+                                # Si el apartado caducó, se modifica temporalmente el status a vacío 
+                                # para que el frontend lo tome como "Pool Libre",
+                                # PERO pasará nuevamente por el Frontend. Como es viejo (diff > 5 días), 
+                                # obvio supera las 72 hrs, por tanto es seguro pasarlo al Pool.
+                                item['status'] = ''
+                        except: pass
+                if valid:
+                    pool.append({
+                        "folio_i": item.get('folio_i'),
+                        "telefono": item.get('telefono'),
+                        "status": item.get('status'),
+                        "hora": item.get('hora'),
+                        "fecha": item.get('fecha'),
+                        "updated": item.get('updated'),
+                        "updated_at": item.get('updated_at')
+                    })
+            return pool
+        except Exception as e:
+            logger.error(f"Error GET POOL: {str(e)}")
+            return []
+
+    def take_pool_client(self, lead_id, asesora_nombre):
+        try:
+            tz_mex = pytz.timezone('America/Mexico_City')
+            now_mx = datetime.now(tz_mex)
+            limit_check = self.supabase.table("AGENDA_OBSOLETA").select("folio_i").eq("status", f"BLOQUEADO_{asesora_nombre}").execute()
+            if limit_check.data and len(limit_check.data) >= 10:
+                return {"status": "error", "message": "Límite de 10 prospectos alcanzado.", "code": 403}
+                
+            lead_check = self.supabase.table("AGENDA_OBSOLETA").select("status, updated_at").eq("folio_i", lead_id).execute()
+            if not lead_check.data:
+                return {"status": "error", "message": "No encontrado", "code": 404}
+            
+            st = lead_check.data[0].get('status') or ''
+            up = lead_check.data[0].get('updated_at')
+            available = False
+            if st in ['', 'NSH'] or st is None:
+                available = True
+            elif st.startswith('BLOQUEADO_'):
+                if up:
+                    try:
+                        dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
+                        if not dt.tzinfo:
+                            dt = tz_mex.localize(dt)
+                        if (now_mx - dt).days > 5:
+                            available = True
+                    except: pass
+            
+            if not available:
+                return {"status": "error", "message": "El prospecto ya fue tomado", "code": 409}
+                
+            self.supabase.table("AGENDA_OBSOLETA").update({
+                "status": f"BLOQUEADO_{asesora_nombre}",
+                "updated": True,
+                "updated_at": now_mx.isoformat()
+            }).eq("folio_i", lead_id).execute()
+            
+            return {"status": "success"}
+        except Exception as e:
+            return {"status": "error", "message": str(e), "code": 500}
+
+    def resolve_pool_client(self, lead_id, asesora_nombre, accion, datos_validacion):
+        try:
+            tz_mex = pytz.timezone('America/Mexico_City')
+            now_mx = datetime.now(tz_mex)
+            
+            new_status = ""
+            if accion == 'descartar':
+                new_status = datos_validacion
+            elif accion == 'nsh':
+                new_status = 'NSH'
+            elif accion == 'agendar':
+                new_status = f"AGENDAx{asesora_nombre}"
+            else:
+                return {"status": "error", "message": "Acción inválida", "code": 400}
+                
+            self.supabase.table("AGENDA_OBSOLETA").update({
+                "status": new_status,
+                "updated": True,
+                "updated_at": now_mx.isoformat()
+            }).eq("folio_i", lead_id).execute()
+            return {"status": "success"}
+        except Exception as e:
+            return {"status": "error", "message": str(e), "code": 500}
+    # --- FIN MÓDULO POOL ---
 
 # Instancia global
 handler = DataHandler()
