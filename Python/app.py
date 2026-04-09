@@ -99,9 +99,39 @@ def update_client_advanced():
     if request.method == 'OPTIONS': return jsonify({"status": "ok"}), 200
     try:
         data = request.json
-        res = handler.actualizar_prospecto_avanzado(data.get('nombre_original'), data.get('updates'), data.get('files_payload'))
+        p_id = data.get('p_id')
+        if not p_id: return jsonify({"status": "error", "message": "Se requiere el identificador único (p_id)."}), 400
+        
+        # Llamamos al handler para guardar en Supabase de forma INMEDIATA y SÍNCRONA
+        res = handler.actualizar_prospecto_avanzado(p_id, data.get('updates'))
+        
+        # Si guardó correctamente en base de datos y venían archivos, los subimos a Drive en un hilo asíncrono
+        if res.get('status') == 'success' and data.get('files_payload'):
+            logger.info(f"DB Update OK, iniciando subida asíncrona a Drive para ID {p_id}")
+            
+            thread = threading.Thread(
+                target=handler.subir_evidencia_fondo,
+                args=(data.get('nombre_original', 'Desconocido'), data.get('files_payload'), res.get('num_seg'), p_id)
+            )
+            thread.start()
+            
+            # Limpiamos variables internas de respuesta antes de regresarlas al cliente frontend
+            res.pop('p_id', None)
+            res.pop('num_seg', None)
+
+        # Retornamos el success inmediatamente al frontend para liberar el socket en macOS
+        updated_data = handler.get_client_full_profile(p_id)
+        res['data'] = updated_data
         return jsonify(res)
     except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/client-details', methods=['GET'])
+def get_client_details():
+    p_id = request.args.get('id')
+    if not p_id: return jsonify({"status":"error"}), 400
+    data = handler.get_client_full_profile(p_id)
+    return jsonify(data)
+
 
 @app.route('/api/delete-client', methods=['POST', 'OPTIONS'])
 def delete_client():
@@ -183,6 +213,32 @@ def get_sync_queue(): return jsonify([])
 
 @app.route('/api/journal-tail', methods=['GET'])
 def get_journal_tail(): return jsonify(["[SISTEMA] Motor v1.10 Activo", "[DB] Sincronización OK"])
+
+# --- INICIO MÓDULO POOL ---
+@app.route('/api/pool', methods=['GET'])
+def get_pool():
+    return jsonify(handler.get_pool_clients())
+
+@app.route('/api/pool/take', methods=['POST', 'OPTIONS'])
+def take_pool():
+    if request.method == 'OPTIONS': return jsonify({"status": "ok"}), 200
+    data = request.json
+    res = handler.take_pool_client(data.get('lead_id'), data.get('nombre_asesora'))
+    code = res.pop('code', 200) if 'code' in res else 200
+    if res.get('status') == 'error':
+        return jsonify(res), code
+    return jsonify(res), 200
+
+@app.route('/api/pool/resolve', methods=['POST', 'OPTIONS'])
+def resolve_pool():
+    if request.method == 'OPTIONS': return jsonify({"status": "ok"}), 200
+    data = request.json
+    res = handler.resolve_pool_client(data.get('lead_id'), data.get('nombre_asesora'), data.get('accion'), data.get('datos_validacion'))
+    code = res.pop('code', 200) if 'code' in res else 200
+    if res.get('status') == 'error':
+        return jsonify(res), code
+    return jsonify(res), 200
+# --- FIN MÓDULO POOL ---
 
 if __name__ == '__main__':
     logger.info(">>> Servidor Cerebro v1.10: Calendario Restaurado <<<")

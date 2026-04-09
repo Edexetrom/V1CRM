@@ -105,23 +105,7 @@
             box-shadow: -10px 0 0 0 #ffffff;
         }
 
-        .perf-en-tiempo {
-            color: #059669;
-            background: #ecfdf5;
-            border: 1px solid #d1fae5;
-        }
 
-        .perf-retraso {
-            color: #f59e0b;
-            background: #fffbeb;
-            border: 1px solid #fef3c7;
-        }
-
-        .perf-accion {
-            color: #dc2626;
-            background: #fef2f2;
-            border: 1px solid #fee2e2;
-        }
 
         .journal-box {
             background: #0f172a;
@@ -196,6 +180,7 @@
         const normalize = (raw) => {
             if (!raw) return {};
             const n = {};
+            n['id_db'] = raw.id_db || raw.id;
             n['Nombre'] = raw.nombre || raw.Nombre || "Sin Nombre";
             n['Asesora'] = raw.asesora || raw.Asesora || "Sin Asesora";
             n['Canal (Tel/WhatsApp)'] = raw.canal || raw.Canal || raw['Canal (Tel/WhatsApp)'] || "---";
@@ -206,6 +191,7 @@
             n['Estado Final'] = raw.estado_final || raw['Estado Final'] || "Seguimiento";
             n['Comentarios'] = raw.comentarios || raw['Comentarios'] || "";
             n['Imagenes'] = raw.imagenes_url || raw['Imagenes'] || "";
+            n['rendimiento'] = raw.rendimiento || "Sin Cita";
 
             for (let i = 1; i <= 30; i++) {
                 n[`Fecha Seguimiento ${i}`] = raw[`fecha_seguimiento_${i}`] || raw[`Fecha Seguimiento ${i}`] || null;
@@ -225,7 +211,7 @@
             const [journalLines, setJournalLines] = useState([]);
             const [auditors, setAuditors] = useState([]);
 
-            const [filters, setFilters] = useState({ nombre: '', asesora: '', interes: '', estado: '', rendimiento: '', fechaRegistro: '' });
+            const [filters, setFilters] = useState({ nombre: '', asesora: '', interes: '', estado: '', rendimiento: '', fechaRegistro: '', fechaSemaforo: '' });
             const [currentPage, setCurrentPage] = useState(1);
             const [modalClient, setModalClient] = useState(null);
             const [deleteConfirmation, setDeleteConfirmation] = useState(null);
@@ -249,7 +235,7 @@
 
             const fetchAuditors = async () => {
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/auditors');
+                    const res = await fetch('http://localhost:5000/api/auditors');
                     const data = await res.json();
                     setAuditors(Array.isArray(data) ? data : []);
                 } catch (e) { console.error("Error cargando auditores:", e); }
@@ -259,16 +245,38 @@
                 if (mainTab === 'journal') return;
                 setLoading(true);
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/all-clients');
+                    const res = await fetch('http://localhost:5000/api/all-clients');
                     const data = await res.json();
                     setClients(Array.isArray(data) ? data.map(normalize) : []);
                 } catch (e) { console.error("Error cargando clientes:", e); }
                 setLoading(false);
             };
 
+            const handleSelectClient = async (c) => {
+                setLoading(true);
+                try {
+                    const id_db = c.id_db;
+                    if (id_db) {
+                        const res = await fetch(`http://localhost:5000/api/client-details?id=${id_db}`);
+                        const fullData = await res.json();
+                        if (fullData) {
+                            setModalClient(normalize(fullData));
+                        } else {
+                            setModalClient(c);
+                        }
+                    } else {
+                        setModalClient(c);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    setModalClient(c);
+                }
+                setLoading(false);
+            };
+
             const fetchSyncQueue = async () => {
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/sync-queue');
+                    const res = await fetch('http://localhost:5000/api/sync-queue');
                     const data = await res.json();
                     setLocalQueue(Array.isArray(data) ? data : []);
                 } catch (e) { console.error("Error en cola sync:", e); }
@@ -276,7 +284,7 @@
 
             const fetchJournalTail = async () => {
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/journal-tail');
+                    const res = await fetch('http://localhost:5000/api/journal-tail');
                     const data = await res.json();
                     setJournalLines(Array.isArray(data) ? [...data].reverse() : []);
                 } catch (e) { console.error("Error en journal:", e); }
@@ -286,7 +294,7 @@
             const handleLogin = async (nombre, password) => {
                 setLoading(true);
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/login-audit', {
+                    const res = await fetch('http://localhost:5000/api/login-audit', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nombre, password })
@@ -304,62 +312,47 @@
 
             const handleLogout = () => { localStorage.clear(); window.location.reload(); };
 
-            // --- LÓGICA DE AUDITORÍA RETROACTIVA ---
-            const getRendimiento = (client) => {
-                let hasHistory = false;
-                // Escaneo inverso de las 30 notas para encontrar la última cita pactada
-                for (let i = 30; i >= 1; i--) {
-                    const fechaGestion = client[`Fecha Seguimiento ${i}`];
-                    const nota = client[`Notas Seguimiento ${i}`];
-                    if (fechaGestion && nota) {
-                        hasHistory = true;
-                        const match = nota.match(/(?:Cita anterior programada para|Fecha contacto anterior):\s*(\d{2}\/\d{2}\/\d{4})/i);
-                        if (match) {
-                            try {
-                                const [d1, m1, y1] = fechaGestion.split('/').map(Number);
-                                const actualDate = new Date(y1, m1 - 1, d1);
-                                actualDate.setHours(0, 0, 0, 0);
+            // --- DICCIONARIO SEMÁFORO DE RENDIMIENTO ---
+            // Supabase entrega: AL DIA, ALERTA, VENCIDO
+            // Frontend dibuja: En tiempo, Retraso, Acción necesaria
+            const DICCIONARIO_TRADUCCION = {
+                'AL DIA': 'En tiempo',
+                'ALERTA': 'Retraso',
+                'VENCIDO': 'Acción necesaria',
+                'SIN CITA': 'Sin Cita',
+                'En tiempo': 'En tiempo',
+                'Retraso': 'Retraso',
+                'Acción Necesaria': 'Acción necesaria',
+                'Acción necesaria': 'Acción necesaria',
+                'Sin Cita': 'Sin Cita'
+            };
 
-                                const [d2, m2, y2] = match[1].split('/').map(Number);
-                                const schedDate = new Date(y2, m2 - 1, d2);
-                                schedDate.setHours(0, 0, 0, 0);
-
-                                const diffDays = Math.floor((actualDate - schedDate) / (1000 * 60 * 60 * 24));
-                                if (diffDays <= 0) return { label: 'En tiempo', class: 'perf-en-tiempo', hex: '#059669' };
-                                if (diffDays <= 1) return { label: 'Retraso', class: 'perf-retraso', hex: '#f59e0b' };
-                                return { label: 'Acción Necesaria', class: 'perf-accion', hex: '#dc2626' };
-                            } catch (e) { }
-                        }
-                        break; // Solo analizamos la última nota relevante
-                    }
-                }
-
-                // Fallback para prospectos sin historial de seguimiento
-                const proxStr = client['Fecha Próx. Contacto'];
-                if (!proxStr || proxStr === '' || proxStr === '--') return { label: 'Sin Cita', class: 'text-slate-400', hex: '#94a3b8' };
-                try {
-                    const [d, m, y] = proxStr.split('/').map(Number);
-                    const proxDate = new Date(y, m - 1, d);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); proxDate.setHours(0, 0, 0, 0);
-                    const diffDays = Math.floor((today - proxDate) / (1000 * 60 * 60 * 24));
-                    if (diffDays <= 0) return { label: 'En tiempo', class: 'perf-en-tiempo', hex: '#059669' };
-                    if (diffDays < 2) return { label: 'Retraso', class: 'perf-retraso', hex: '#f59e0b' };
-                    return { label: 'Acción Necesaria', class: 'perf-accion', hex: '#dc2626' };
-                } catch (e) { return { label: 'Error', class: 'text-slate-300', hex: '#cbd5e1' }; }
+            const SEMAFORO_DICT = {
+                'En tiempo': 'bg-green-50 text-green-700 border-green-200',
+                'Retraso': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+                'Acción necesaria': 'bg-red-50 text-red-700 border-red-200',
+                'Sin Cita': 'bg-slate-100 text-slate-400 border-slate-200'
             };
 
             // --- PROCESAMIENTO DE DATOS ---
-            const processedClients = useMemo(() => clients.map(c => ({ ...c, _rendimiento: getRendimiento(c) })), [clients]);
+            const processedClients = useMemo(() => clients.map(c => {
+                const rawRend = c.rendimiento || 'Sin Cita';
+                const uiLabel = DICCIONARIO_TRADUCCION[rawRend] || 'Sin Cita';
+                const tailwindClasses = SEMAFORO_DICT[uiLabel] || SEMAFORO_DICT['Sin Cita'];
+                return { ...c, _rendimientoClass: tailwindClasses, _rendimientoLabel: uiLabel };
+            }), [clients]);
 
             const filteredClients = useMemo(() => {
                 const search = (filters.nombre || '').toLowerCase();
-                return processedClients.filter(c => {
+                let result = processedClients.filter(c => {
                     const matchesSearch = (search === '' || (c.Nombre && c.Nombre.toLowerCase().includes(search)) || (c['Canal (Tel/WhatsApp)'] || '').toString().includes(search));
                     const matchesAsesora = (filters.asesora === '' || c.Asesora === filters.asesora);
                     const matchesInteres = (filters.interes === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interes)));
                     const matchesEstado = (filters.estado === '' || c['Estado Final'] === filters.estado);
-                    const matchesRendimiento = (filters.rendimiento === '' || c._rendimiento.label === filters.rendimiento);
+                    const matchesRendimiento = (filters.rendimiento === '' ||
+                        c._rendimientoLabel === filters.rendimiento ||
+                        (c._rendimientoLabel || '').toLowerCase() === (filters.rendimiento || '').toLowerCase()
+                    );
 
                     const matchesFecha = (filters.fechaRegistro === '' || (() => {
                         const parts = (c['Fecha 1er Contacto'] || '').split('/');
@@ -370,6 +363,32 @@
 
                     return matchesSearch && matchesAsesora && matchesInteres && matchesEstado && matchesRendimiento && matchesFecha;
                 });
+
+                // --- INICIO MÓDULO FECHAS ---
+                if (filters.fechaSemaforo) {
+                    result = result.filter(c => c['Estado Final'] !== 'Venta' && c['Estado Final'] !== 'No interesado');
+                    result = result.filter(c => {
+                        const dateStr = c['Fecha Próx. Contacto'];
+                        if (!dateStr || dateStr === '--') return false;
+                        const [d, m, y] = dateStr.split('/');
+                        const citaTime = new Date(`${y}-${m}-${d}T00:00:00-06:00`);
+
+                        const nowMx = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+                        nowMx.setHours(0, 0, 0, 0);
+
+                        const diffTime = citaTime - nowMx;
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                        if (filters.fechaSemaforo === 'vencidos') return diffDays < 0;
+                        if (filters.fechaSemaforo === 'hoy') return diffDays === 0;
+                        if (filters.fechaSemaforo === 'manana') return diffDays === 1;
+                        if (filters.fechaSemaforo === 'proximos') return diffDays > 1;
+                        return true;
+                    });
+                }
+                // --- FIN MÓDULO FECHAS ---
+
+                return result;
             }, [processedClients, filters]);
 
             const paginatedClients = useMemo(() => {
@@ -379,10 +398,12 @@
 
             const totalPages = Math.ceil(filteredClients.length / ITEMS_PER_PAGE);
 
-            // CORRECCIÓN: Ahora cuenta basándose en processedClients (universo total) y no en filteredClients
             const statsRendimiento = useMemo(() => {
-                const counts = { "En tiempo": 0, "Retraso": 0, "Acción Necesaria": 0 };
-                processedClients.forEach(c => { if (counts.hasOwnProperty(c._rendimiento.label)) counts[c._rendimiento.label]++; });
+                const counts = { "En tiempo": 0, "Retraso": 0, "Acción necesaria": 0 };
+                processedClients.forEach(c => {
+                    const normLabel = c._rendimientoLabel;
+                    if (counts.hasOwnProperty(normLabel)) counts[normLabel]++;
+                });
                 return counts;
             }, [processedClients]);
 
@@ -402,7 +423,7 @@
                 setDeleteConfirmation(null);
                 setLoading(true);
                 try {
-                    await fetch('https://crmasesorasapi.libresdeumas.com/api/delete-client', {
+                    await fetch('http://localhost:5000/api/delete-client', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nombre: client.Nombre, canal: client['Canal (Tel/WhatsApp)'] })
@@ -429,8 +450,8 @@
                                 {Object.keys(THEMES).map(t => <button key={t} onClick={() => { setTheme(t); localStorage.setItem('audit_theme', t); }} className={`w-5 h-5 rounded-full transition-all ${theme === t ? 'ring-2 ring-offset-1 ring-slate-300 scale-110 shadow-sm' : 'opacity-30 hover:opacity-100'}`} style={{ backgroundColor: THEMES[t].primary }} />)}
                             </div>
                             <div className="flex items-center gap-2">
-                                <button onClick={() => window.location.href = 'https://crmasesorasapi.libresdeumas.com/api/download-journal'} title="Exportar Journal" className="bg-slate-800 text-white w-9 h-9 rounded-xl shadow flex items-center justify-center hover:bg-slate-900 transition-all cursor-pointer"><i className="fas fa-file-export text-xs"></i></button>
-                                <button onClick={() => window.location.href = 'https://crmasesorasapi.libresdeumas.com/api/download-db'} title="Descargar DB Local" className="bg-sky-600 text-white w-9 h-9 rounded-xl shadow flex items-center justify-center hover:bg-sky-700 transition-all cursor-pointer"><i className="fas fa-database text-xs"></i></button>
+                                <button onClick={() => window.location.href = 'http://localhost:5000/api/download-journal'} title="Exportar Journal" className="bg-slate-800 text-white w-9 h-9 rounded-xl shadow flex items-center justify-center hover:bg-slate-900 transition-all cursor-pointer"><i className="fas fa-file-export text-xs"></i></button>
+                                <button onClick={() => window.location.href = 'http://localhost:5000/api/download-db'} title="Descargar DB Local" className="bg-sky-600 text-white w-9 h-9 rounded-xl shadow flex items-center justify-center hover:bg-sky-700 transition-all cursor-pointer"><i className="fas fa-database text-xs"></i></button>
                             </div>
                             <button onClick={refreshAll} className="btn-sync" disabled={loading}><i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`} style={{ color: activeTheme.primary }}></i><span className="hidden sm:inline">ACTUALIZAR</span></button>
                             <button onClick={handleLogout} className="text-slate-300 hover:text-red-500 transition-all p-2 ml-2 cursor-pointer bg-transparent border-none"><i className="fas fa-power-off text-lg"></i></button>
@@ -460,7 +481,7 @@
                                         <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 text-xl shadow-inner"><i className="fas fa-clock"></i></div>
                                     </div>
                                     <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
-                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Acción Necesaria</p><h4 className="text-2xl font-black text-red-500">{statsRendimiento["Acción Necesaria"]}</h4></div>
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Acción Necesaria</p><h4 className="text-2xl font-black text-red-500">{statsRendimiento["Acción necesaria"]}</h4></div>
                                         <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 text-xl shadow-inner"><i className="fas fa-exclamation-circle"></i></div>
                                     </div>
                                 </div>
@@ -498,9 +519,19 @@
                                     </select>
                                     <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none" value={filters.rendimiento} onChange={e => setFilters({ ...filters, rendimiento: e.target.value })}>
                                         <option value="">Rendimiento</option>
-                                        {["En tiempo", "Retraso", "Acción Necesaria"].map(o => <option key={o} value={o}>{o}</option>)}
+                                        {["En tiempo", "Retraso", "Acción Necesaria", "Sin Cita"].map(o => <option key={o} value={o}>{o}</option>)}
                                     </select>
-                                    <button className="text-slate-400 hover:text-slate-600 px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors cursor-pointer bg-transparent border-none" onClick={() => setFilters({ nombre: '', asesora: '', interes: '', estado: '', rendimiento: '', fechaRegistro: '' })}>Limpiar</button>
+                                    {/* --- INICIO MÓDULO FECHAS --- */}
+                                    <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none" value={filters.fechaSemaforo} onChange={e => setFilters({ ...filters, fechaSemaforo: e.target.value })}>
+                                        <option value="">Semáforo (Todas)</option>
+                                        <option value="vencidos">Vencidos 🔴</option>
+                                        <option value="hoy">Para Hoy 🟠</option>
+                                        <option value="manana">Mañana 🟡</option>
+                                        <option value="proximos">Próximos 🔵</option>
+                                    </select>
+                                    {/* --- FIN MÓDULO FECHAS --- */}
+
+                                    <button className="text-slate-400 hover:text-slate-600 px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors cursor-pointer bg-transparent border-none ml-auto" onClick={() => setFilters({ nombre: '', asesora: '', interes: '', estado: '', rendimiento: '', fechaRegistro: '', fechaSemaforo: '' })}>Limpiar</button>
                                 </div>
 
                                 <div className="bg-white rounded-[2rem] shadow-sm overflow-hidden border border-slate-100">
@@ -513,6 +544,7 @@
                                                     <th className="px-5 py-4">Registro</th>
                                                     <th className="px-5 py-4">Interés</th>
                                                     <th className="px-5 py-4">Cita</th>
+                                                    <th className="px-5 py-4">Estado</th>
                                                     <th className="px-5 py-4">Status</th>
                                                     <th className="px-5 py-4 text-right pr-8">Acción</th>
                                                 </tr>
@@ -520,7 +552,24 @@
                                             <tbody className="divide-y divide-slate-100">
                                                 {paginatedClients.map((c, i) => (
                                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="px-5 py-3.5"><span className="px-2.5 py-1 rounded-lg font-black text-[9px] uppercase border inline-block bg-slate-100 text-slate-600 border-slate-200">{c.Asesora}</span></td>
+                                                        <td className="px-5 py-3.5">
+                                                            {/* --- INICIO SEMAFORO MATEMATICO --- */}
+                                                            <span className={`px-2.5 py-1 rounded-lg border inline-block bg-slate-100 text-[9px] uppercase border-slate-200 ${(() => {
+                                                                const dt = c['Fecha Próx. Contacto'];
+                                                                if (!dt || dt === '--') return 'text-slate-600 font-black';
+                                                                const [d, m, y] = dt.split('/');
+                                                                const cita = new Date(`${y}-${m}-${d}T00:00:00-06:00`);
+                                                                const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+                                                                hoy.setHours(0, 0, 0, 0);
+                                                                const diff = Math.ceil((cita - hoy) / (1000 * 60 * 60 * 24));
+                                                                if (diff >= 0) return 'text-emerald-600 font-black';
+                                                                if (diff === -1) return 'text-amber-500 font-black';
+                                                                return 'text-red-600 font-black';
+                                                            })()}`}>
+                                                                {c.Asesora}
+                                                            </span>
+                                                            {/* --- FIN SEMAFORO MATEMATICO --- */}
+                                                        </td>
                                                         <td className="px-5 py-3.5 font-bold text-slate-700 text-[11px] whitespace-nowrap">{c.Nombre}</td>
                                                         <td className="px-5 py-3.5 font-bold text-slate-400 text-[10px]">{c['Fecha 1er Contacto']}</td>
                                                         <td className="px-5 py-3.5">
@@ -529,9 +578,10 @@
                                                             </span>
                                                         </td>
                                                         <td className="px-5 py-3.5 text-[11px] font-bold text-slate-500 whitespace-nowrap">{c['Fecha Próx. Contacto'] || '--'}</td>
-                                                        <td className="px-5 py-3.5"><span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border ${c._rendimiento.class}`}>{c._rendimiento.label}</span></td>
+                                                        <td className="px-5 py-3.5"><span className={`px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' : c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{c['Estado Final']}</span></td>
+                                                        <td className="px-5 py-3.5"><span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border ${c._rendimientoClass}`}>{c._rendimientoLabel}</span></td>
                                                         <td className="px-5 py-3.5 text-right pr-8 flex justify-end gap-2">
-                                                            <button onClick={() => setModalClient(c)} className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-slate-100 hover:text-sky-500 transition-all cursor-pointer"><i className="fas fa-folder-open text-xs"></i></button>
+                                                            <button onClick={() => handleSelectClient(c)} className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-slate-100 hover:text-sky-500 transition-all cursor-pointer"><i className="fas fa-folder-open text-xs"></i></button>
                                                             {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c)} className="w-8 h-8 rounded-lg bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all cursor-pointer"><i className="fas fa-trash-alt text-xs"></i></button>}
                                                         </td>
                                                     </tr>
@@ -667,15 +717,15 @@
                 if (!canvasRef.current || !data) return;
                 const ctx = canvasRef.current.getContext('2d'); if (chartRef.current) chartRef.current.destroy();
                 const counts = data.reduce((acc, curr) => {
-                    let key = groupBy === 'Rendimiento' ? curr._rendimiento?.label : curr[groupBy];
+                    let key = groupBy === 'Rendimiento' ? curr._rendimientoLabel : curr[groupBy];
                     if (!key) key = 'Sin definir';
                     if (isInterest && key.includes('<')) key = key.split(' <')[0];
                     acc[key] = (acc[key] || 0) + 1; return acc;
                 }, {});
                 let l = Object.keys(counts), d = Object.values(counts), c;
                 if (groupBy === 'Rendimiento') {
-                    const map = { "En tiempo": "#059669", "Retraso": "#f59e0b", "Acción Necesaria": "#dc2626", "Sin Cita": "#94a3b8" };
-                    l = ["En tiempo", "Retraso", "Acción Necesaria", "Sin Cita"].filter(k => counts[k]);
+                    const map = { "En tiempo": "#059669", "Retraso": "#f59e0b", "Acción necesaria": "#dc2626", "Sin Cita": "#94a3b8" };
+                    l = ["En tiempo", "Retraso", "Acción necesaria", "Sin Cita"].filter(k => counts[k]);
                     d = l.map(k => counts[k]); c = l.map(k => map[k]);
                 } else {
                     c = l.map((_, i) => i === 0 ? activeColor : COLOR_PALETTE[i % COLOR_PALETTE.length]);
@@ -715,7 +765,7 @@
                 }
                 setSaving(true);
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/edit-client-field', {
+                    const res = await fetch('http://localhost:5000/api/edit-client-field', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
