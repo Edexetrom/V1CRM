@@ -226,7 +226,7 @@
 
             useEffect(() => {
                 if (!user) return;
-                const freq = mainTab === 'journal' ? 5000 : 60000;
+                const freq = mainTab === 'journal' ? 5000 : 300000;
                 const intervalId = setInterval(() => refreshAll(), freq);
                 return () => clearInterval(intervalId);
             }, [user, mainTab]);

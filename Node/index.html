@@ -447,7 +447,7 @@
             const fetchClients = async (name, silent = false) => {
                 if (!silent) setLoading(true);
                 try {
-                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${encodeURIComponent(name)}&t=${Date.now()}`);
+                    const res = await fetch(`https://crmasesorasapi.libresdeumas.com/api/clients?asesora=${encodeURIComponent(name)}`);
                     const data = await res.json();
                     if (Array.isArray(data)) {
                         setClients(data.map(normalizeData));

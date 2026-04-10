@@ -325,7 +325,7 @@ class DataHandler:
         try:
             while True:
                 res = self.supabase.table("prospectos") \
-                    .select("id, nombre, canal, nivel_interes, fecha_proxima, fecha_registro, estado_final, asesora, rendimiento, seguimientos!seguimientos_prospecto_id_fkey(*)", count='exact') \
+                    .select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento", count='exact') \
                     .order("updated_at", desc=True) \
                     .range(offset, offset + limit - 1).execute()
                 batch = res.data
@@ -432,7 +432,7 @@ class DataHandler:
 
     def get_clients_for_agent(self, agent_name):
         try:
-            res = self.supabase.table("prospectos").select("id, nombre, canal, nivel_interes, fecha_proxima, fecha_registro, estado_final, asesora, rendimiento, seguimientos!seguimientos_prospecto_id_fkey(*)").ilike("asesora", f"%{agent_name}%").order("updated_at", desc=True).execute()
+            res = self.supabase.table("prospectos").select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento").ilike("asesora", f"%{agent_name}%").order("updated_at", desc=True).execute()
             return [self._reconstruir_objeto_prospecto(item) for item in res.data]
         except: return []
 
@@ -445,83 +445,79 @@ class DataHandler:
             
             offset = 0
             limit = 1000
-            pool = []
+            all_data = []
             
             # Se hace el query sin created_at para evitar el error column AGENDA_OBSOLETA.created_at does not exist
             while True:
                 res = self.supabase.table("AGENDA_OBSOLETA").select("folio_i, telefono, status, hora, fecha, updated, updated_at").order("updated_at", desc=True).range(offset, offset + limit - 1).execute()
                 if not res.data: break
-                
-                for item in res.data:
-                    st = item.get('status') or ''
-                    valid = False
-                    
-                    if st in ['', 'NSH', 'LIBRE'] or st is None:
-                        # 2. EVALUACIÓN DE ANTIGÜEDAD (Regla 3 días usando la columna 'fecha')
-                        fecha_str = item.get('fecha')
-                        
-                        if fecha_str:
-                            try:
-                                # Parsear la fecha soportando formatos convencionales YYYY-MM-DD o DD/MM/YYYY
-                                fecha_str_clean = str(fecha_str).strip()[:10]
-                                if '-' in fecha_str_clean:
-                                    dt_fecha = datetime.strptime(fecha_str_clean, "%Y-%m-%d").date()
-                                elif '/' in fecha_str_clean:
-                                    dt_fecha = datetime.strptime(fecha_str_clean, "%d/%m/%Y").date()
-                                else:
-                                    dt_fecha = now_mx.date() # Fallback
-                                    
-                                # 3. Calcular la diferencia exacta de días contra el hoy en CDMX
-                                diff_days = (now_mx.date() - dt_fecha).days
-                                
-                                # Si tiene 3 días o más de antigüedad, se libera al Pool público
-                                if diff_days >= 3:
-                                    valid = True
-                                else:
-                                    valid = False
-                            except Exception as e:
-                                # Por seguridad, si falla el parseo, omitirlo (valid = False) 
-                                valid = False
-                        else:
-                            # Si no hay forma de saber cuándo se creó, lo omitimos
-                            valid = False
-
-                    elif st.startswith('BLOQUEADO_'):
-                        # Siempre debe ser True para que el registro viaje al frontend y aparezca en Mis Reclamados
-                        valid = True
-                        up = item.get('updated_at')
-                        if up:
-                            try:
-                                dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
-                                if not dt.tzinfo:
-                                    dt = tz_mex.localize(dt)
-                                diff = (now_mx - dt).days
-                                if diff > 5:
-                                    # Si el apartado caducó, se modifica temporalmente el status a vacío 
-                                    # para que el frontend lo tome como "Pool Libre",
-                                    # PERO pasará nuevamente por el Frontend. Como es viejo (diff > 5 días), 
-                                    # obvio supera las 72 hrs, por tanto es seguro pasarlo al Pool.
-                                    item['status'] = ''
-                            except: pass
-                            
-                    if valid:
-                        pool.append({
-                            "folio_i": item.get('folio_i'),
-                            "telefono": item.get('telefono'),
-                            "status": item.get('status'),
-                            "hora": item.get('hora'),
-                            "fecha": item.get('fecha'),
-                            "updated": item.get('updated'),
-                            "updated_at": item.get('updated_at')
-                        })
-                        
-                        # Limitar a 500 registros para optimizar carga
-                        if len(pool) >= 500:
-                            return pool
-
+                all_data.extend(res.data)
                 if len(res.data) < limit: break
                 offset += limit
                 
+            if not all_data: return []
+            pool = []
+            for item in all_data:
+                st = item.get('status') or ''
+                valid = False
+                
+                if st in ['', 'NSH', 'LIBRE'] or st is None:
+                    # 2. EVALUACIÓN DE ANTIGÜEDAD (Regla 3 días usando la columna 'fecha')
+                    fecha_str = item.get('fecha')
+                    
+                    if fecha_str:
+                        try:
+                            # Parsear la fecha soportando formatos convencionales YYYY-MM-DD o DD/MM/YYYY
+                            fecha_str_clean = str(fecha_str).strip()[:10]
+                            if '-' in fecha_str_clean:
+                                dt_fecha = datetime.strptime(fecha_str_clean, "%Y-%m-%d").date()
+                            elif '/' in fecha_str_clean:
+                                dt_fecha = datetime.strptime(fecha_str_clean, "%d/%m/%Y").date()
+                            else:
+                                dt_fecha = now_mx.date() # Fallback
+                                
+                            # 3. Calcular la diferencia exacta de días contra el hoy en CDMX
+                            diff_days = (now_mx.date() - dt_fecha).days
+                            
+                            # Si tiene 3 días o más de antigüedad, se libera al Pool público
+                            if diff_days >= 3:
+                                valid = True
+                            else:
+                                valid = False
+                        except Exception as e:
+                            # Por seguridad, si falla el parseo, omitirlo (valid = False) 
+                            valid = False
+                    else:
+                        # Si no hay forma de saber cuándo se creó, lo omitimos
+                        valid = False
+
+                elif st.startswith('BLOQUEADO_'):
+                    # Siempre debe ser True para que el registro viaje al frontend y aparezca en Mis Reclamados
+                    valid = True
+                    up = item.get('updated_at')
+                    if up:
+                        try:
+                            dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
+                            if not dt.tzinfo:
+                                dt = tz_mex.localize(dt)
+                            diff = (now_mx - dt).days
+                            if diff > 5:
+                                # Si el apartado caducó, se modifica temporalmente el status a vacío 
+                                # para que el frontend lo tome como "Pool Libre",
+                                # PERO pasará nuevamente por el Frontend. Como es viejo (diff > 5 días), 
+                                # obvio supera las 72 hrs, por tanto es seguro pasarlo al Pool.
+                                item['status'] = ''
+                        except: pass
+                if valid:
+                    pool.append({
+                        "folio_i": item.get('folio_i'),
+                        "telefono": item.get('telefono'),
+                        "status": item.get('status'),
+                        "hora": item.get('hora'),
+                        "fecha": item.get('fecha'),
+                        "updated": item.get('updated'),
+                        "updated_at": item.get('updated_at')
+                    })
             return pool
         except Exception as e:
             logger.error(f"Error GET POOL: {str(e)}")
