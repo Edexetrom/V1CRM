@@ -20,7 +20,7 @@ logger = logging.getLogger("DataHandler")
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 SUPABASE_URL = "https://qldrdljyuqlyqwoauwyd.supabase.co"
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZHJkbGp5dXFseXF3b2F1d3lkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQ0MDI3MCwiZXhwIjoyMDg3MDE2MjcwfQ.Ic0ExvTXGFFr69BmWkirjF4GrjFGeuOeYMaWPXsTIAk"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or ""
 
 class GoogleSheetsSync:
     """
