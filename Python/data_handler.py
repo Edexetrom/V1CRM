@@ -442,77 +442,66 @@ class DataHandler:
             # 1. Establecer hora actual en base a timezone local
             tz_mex = pytz.timezone('America/Mexico_City')
             now_mx = datetime.now(tz_mex)
-            
-            offset = 0
-            limit = 50 # Lote más pequeño para optimizar consultas a Supabase
             pool = []
             
-            # Se hace el query sin created_at para evitar el error column AGENDA_OBSOLETA.created_at does not exist
-            while True:
-                res = self.supabase.table("AGENDA_OBSOLETA").select("folio_i, telefono, status, hora, fecha, updated, updated_at").order("updated_at", desc=True).range(offset, offset + limit - 1).execute()
-                if not res.data: break
+            # --- CONSULTA 1: Obtener todos los registros BLOQUEADOS ---
+            # Esto es vital para que las asesoras vean sus prospectos reclamados en "Mis Reclamados"
+            blocked_res = self.supabase.table("AGENDA_OBSOLETA") \
+                .select("folio_i, telefono, status, hora, fecha, updated, updated_at") \
+                .like("status", "BLOQUEADO_%") \
+                .execute()
                 
-                for item in res.data:
-                    st = item.get('status') or ''
-                    valid = False
-                    
-                    if st in ['', 'NSH', 'LIBRE'] or st is None:
-                        # 2. EVALUACIÓN DE ANTIGÜEDAD (Regla 3 días usando la columna 'fecha')
-                        fecha_str = item.get('fecha')
-                        
-                        if fecha_str:
-                            try:
-                                # Parsear la fecha soportando formatos convencionales YYYY-MM-DD o DD/MM/YYYY
-                                fecha_str_clean = str(fecha_str).strip()[:10]
-                                if '-' in fecha_str_clean:
-                                    dt_fecha = datetime.strptime(fecha_str_clean, "%Y-%m-%d").date()
-                                elif '/' in fecha_str_clean:
-                                    dt_fecha = datetime.strptime(fecha_str_clean, "%d/%m/%Y").date()
-                                else:
-                                    dt_fecha = now_mx.date() # Fallback
-                                    
-                                # 3. Calcular la diferencia exacta de días contra el hoy en CDMX
-                                diff_days = (now_mx.date() - dt_fecha).days
-                                
-                                # Si tiene 3 días o más de antigüedad, se libera al Pool público
-                                if diff_days >= 3:
-                                    valid = True
-                            except Exception as e:
-                                valid = False
-                                
-                    elif st.startswith('BLOQUEADO_'):
-                        # Siempre debe ser True para que el registro viaje al frontend y aparezca en Mis Reclamados
-                        valid = True
-                        up = item.get('updated_at')
-                        if up:
-                            try:
-                                dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
-                                if not dt.tzinfo:
-                                    dt = tz_mex.localize(dt)
-                                diff = (now_mx - dt).days
-                                if diff > 5:
-                                    # Si el apartado caducó, se modifica temporalmente el status a vacío 
-                                    item['status'] = ''
-                            except: pass
-                            
-                    if valid:
-                        pool.append({
-                            "folio_i": item.get('folio_i'),
-                            "telefono": item.get('telefono'),
-                            "status": item.get('status'),
-                            "hora": item.get('hora'),
-                            "fecha": item.get('fecha'),
-                            "updated": item.get('updated'),
-                            "updated_at": item.get('updated_at')
-                        })
-                        
-                        # Detener el ciclo si ya logramos 10 prospectos válidos
-                        if len(pool) == 10:
-                            return pool
-                            
-                if len(res.data) < limit: break
-                offset += limit
+            for item in blocked_res.data:
+                up = item.get('updated_at')
+                if up:
+                    try:
+                        dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
+                        if not dt.tzinfo:
+                            dt = tz_mex.localize(dt)
+                        diff = (now_mx - dt).days
+                        if diff > 5:
+                            # Si el apartado caducó, se modifica el status a vacío
+                            item['status'] = ''
+                    except: pass
                 
+                pool.append({
+                    "folio_i": item.get('folio_i'),
+                    "telefono": item.get('telefono'),
+                    "status": item.get('status'),
+                    "hora": item.get('hora'),
+                    "fecha": item.get('fecha'),
+                    "updated": item.get('updated'),
+                    "updated_at": item.get('updated_at')
+                })
+            
+            # --- CONSULTA 2: Obtener registros públicos (LIBRES) con antigüedad >= 3 días ---
+            # Para optimizar y evitar loops costosos, filtramos la fecha directamente en Supabase
+            three_days_ago = (now_mx - timedelta(days=3)).strftime("%Y-%m-%d")
+            public_res = self.supabase.table("AGENDA_OBSOLETA") \
+                .select("folio_i, telefono, status, hora, fecha, updated, updated_at") \
+                .lte("fecha", three_days_ago) \
+                .order("updated_at", desc=True) \
+                .limit(300) \
+                .execute()
+                
+            public_added = 0
+            for item in public_res.data:
+                st = item.get('status') or ''
+                if st in ['', 'NSH', 'LIBRE'] or st is None:
+                    pool.append({
+                        "folio_i": item.get('folio_i'),
+                        "telefono": item.get('telefono'),
+                        "status": item.get('status'),
+                        "hora": item.get('hora'),
+                        "fecha": item.get('fecha'),
+                        "updated": item.get('updated'),
+                        "updated_at": item.get('updated_at')
+                    })
+                    public_added += 1
+                    # Asegurar que traemos al menos 100 prospectos libres para cumplir la meta de mostrar >= 50
+                    if public_added >= 100:
+                        break
+                        
             return pool
         except Exception as e:
             logger.error(f"Error GET POOL: {str(e)}")
