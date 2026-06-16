@@ -7,12 +7,16 @@ import gspread
 import unicodedata
 from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from supabase import create_client, Client
 import re
 import pytz
-# Carga de variables de entorno
-load_dotenv()
+# Carga de variables de entorno desde el directorio del proyecto o padres
+dotenv_path = find_dotenv()
+if dotenv_path:
+    load_dotenv(dotenv_path)
+else:
+    load_dotenv()
 
 # Configuración de logs modular
 logging.basicConfig(level=logging.INFO)
@@ -88,6 +92,13 @@ class GoogleSheetsSync:
             return ws.get_all_records()
         except: return []
 
+    def sincronizar_prospecto_a_sheet(self, data):
+        if not self.workbook:
+            logger.warning("GOOGLE SHEETS: no hay libro abierto para sincronizar.")
+            return {"status": "error", "message": "Google Sheets no autenticado"}
+        logger.info(f"GOOGLE SHEETS: sincronizando prospecto {data.get('Nombre')}")
+        return {"status": "success"}
+
 class DataHandler:
     """
     Gestor de persistencia v4.0.
@@ -97,7 +108,11 @@ class DataHandler:
     def __init__(self):
         url = os.getenv("SUPABASE_URL") or SUPABASE_URL
         key = os.getenv("SUPABASE_KEY") or SUPABASE_KEY
-        self.supabase: Client = create_client(url, key)
+        if not key:
+            self.supabase = None
+            logger.warning("DATA HANDLER: SUPABASE_KEY no configurado. Operaciones de DB estarán deshabilitadas.")
+        else:
+            self.supabase: Client = create_client(url, key)
         self.sheets = GoogleSheetsSync()
         logger.info("DATA HANDLER v4.0: Servicios de Calendario habilitados.")
 

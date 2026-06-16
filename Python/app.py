@@ -19,8 +19,12 @@ def background_sync(action_type, data):
     """
     try:
         logger.info(f"Worker: Iniciando sincronización de fondo para {data.get('Nombre')}")
-        # Llamada al método de sincronización en el módulo de sheets
-        sheets_sync.sincronizar_prospecto_a_sheet(data)
+        if hasattr(handler, 'sincronizar_prospecto_a_sheet'):
+            handler.sincronizar_prospecto_a_sheet(data)
+        elif getattr(handler, 'sheets', None) and hasattr(handler.sheets, 'sincronizar_prospecto_a_sheet'):
+            handler.sheets.sincronizar_prospecto_a_sheet(data)
+        else:
+            raise RuntimeError("No hay método disponible para sincronizar con Google Sheets")
         logger.info(f"Worker: Sincronización finalizada exitosamente.")
     except Exception as e:
         logger.error(f"Worker Error: No se pudo completar la sincronización: {e}")
