@@ -286,7 +286,7 @@
                 const [selectedIds, setSelectedIds] = useState([]);
 
                 const misReclamados = poolData.filter(p => p.status === `BLOQUEADO_${user}`);
-                const poolLibre = poolData.filter(p => !p.status || p.status === 'NSH' || p.status === 'LIBRE');
+                const poolLibre = poolData.filter(p => p.status === 'ISABELA');
 
                 const allowedSelection = Math.max(0, 10 - misReclamados.length);
 

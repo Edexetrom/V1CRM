@@ -489,20 +489,19 @@ class DataHandler:
                     "updated_at": item.get('updated_at')
                 })
             
-            # --- CONSULTA 2: Obtener registros públicos (LIBRES) con antigüedad >= 3 días ---
-            # Para optimizar y evitar loops costosos, filtramos la fecha directamente en Supabase
+            # --- CONSULTA 2: Obtener registros públicos (ISABELA) con antigüedad >= 3 días ---
+            # Para optimizar y evitar loops costosos, filtramos la fecha y status directamente en Supabase
             three_days_ago = (now_mx - timedelta(days=3)).strftime("%Y-%m-%d")
             public_res = self.supabase.table("AGENDA_OBSOLETA") \
                 .select("folio_i, telefono, status, hora, fecha, updated, updated_at") \
+                .eq("status", "ISABELA") \
                 .lte("fecha", three_days_ago) \
                 .order("updated_at", desc=True) \
-                .limit(300) \
+                .limit(100) \
                 .execute()
                 
-            public_added = 0
             for item in public_res.data:
-                st = item.get('status') or ''
-                if st in ['', 'NSH', 'LIBRE'] or st is None:
+                if item.get('status') == 'ISABELA':
                     pool.append({
                         "folio_i": item.get('folio_i'),
                         "telefono": item.get('telefono'),
@@ -512,10 +511,6 @@ class DataHandler:
                         "updated": item.get('updated'),
                         "updated_at": item.get('updated_at')
                     })
-                    public_added += 1
-                    # Asegurar que traemos al menos 100 prospectos libres para cumplir la meta de mostrar >= 50
-                    if public_added >= 100:
-                        break
                         
             return pool
         except Exception as e:
@@ -534,10 +529,10 @@ class DataHandler:
             if not lead_check.data:
                 return {"status": "error", "message": "No encontrado", "code": 404}
             
-            st = lead_check.data[0].get('status') or ''
+            st = (lead_check.data[0].get('status') or '').strip()
             up = lead_check.data[0].get('updated_at')
             available = False
-            if st in ['', 'NSH'] or st is None:
+            if st == 'ISABELA':
                 available = True
             elif st.startswith('BLOQUEADO_'):
                 if up:
