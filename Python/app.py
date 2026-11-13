@@ -242,6 +242,25 @@ def resolve_pool():
     if res.get('status') == 'error':
         return jsonify(res), code
     return jsonify(res), 200
+@app.route('/api/audit/pool-summary', methods=['GET'])
+def get_audit_pool_summary():
+    return jsonify(handler.get_pool_audit_summary())
+
+@app.route('/api/edit-client-field', methods=['POST', 'OPTIONS'])
+def edit_client_field():
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+    data = request.json or {}
+    res = handler.edit_client_field(
+        data.get('p_id'),
+        data.get('canal'),
+        data.get('field'),
+        data.get('new_value'),
+        data.get('auditor_nombre'),
+        data.get('password')
+    )
+    return jsonify(res), res.get('code', 200)
+
 # --- FIN MÓDULO POOL ---
 
 if __name__ == '__main__':

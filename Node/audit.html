@@ -165,6 +165,11 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         const PERMISOS = { SUPERIOR: 'Superior', GESTOR: 'Gestor', VISUALIZADOR: 'Visualizador' };
+        const ESTADO_OPTIONS = ["Seguimiento", "Venta", "Contactar más tarde", "No interesado"];
+        const isSuperAdmin = (p) => {
+            const norm = (p || '').toString().trim().toLowerCase();
+            return norm === 'superior' || norm === 'super admin' || norm === 'superadmin';
+        };
         const THEMES = {
             ocean: { primary: '#0ea5e9', bg: 'bg-sky-50' },
             emerald: { primary: '#10b981', bg: 'bg-emerald-50' },
@@ -210,6 +215,8 @@
             const [localQueue, setLocalQueue] = useState([]);
             const [journalLines, setJournalLines] = useState([]);
             const [auditors, setAuditors] = useState([]);
+            const [agents, setAgents] = useState([]);
+            const [poolSummary, setPoolSummary] = useState([]);
 
             const [filters, setFilters] = useState({ nombre: '', asesora: '', interes: '', estado: '', rendimiento: '', fechaRegistro: '', fechaSemaforo: '' });
             const [currentPage, setCurrentPage] = useState(1);
@@ -231,7 +238,23 @@
                 return () => clearInterval(intervalId);
             }, [user, mainTab]);
 
-            const refreshAll = () => { fetchAllClients(); fetchSyncQueue(); fetchJournalTail(); };
+            const refreshAll = () => { fetchAllClients(); fetchSyncQueue(); fetchJournalTail(); fetchAgents(); fetchPoolSummary(); };
+
+            const fetchAgents = async () => {
+                try {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/agents');
+                    const data = await res.json();
+                    setAgents(Array.isArray(data) ? data : []);
+                } catch (e) { console.error("Error cargando asesoras:", e); }
+            };
+
+            const fetchPoolSummary = async () => {
+                try {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/audit/pool-summary');
+                    const data = await res.json();
+                    setPoolSummary(Array.isArray(data) ? data : []);
+                } catch (e) { console.error("Error cargando resumen pool:", e); }
+            };
 
             const fetchAuditors = async () => {
                 try {
@@ -408,12 +431,22 @@
             }, [processedClients]);
 
             // --- ACCIONES DE EDICIÓN ---
-            const handleUpdateClientFieldLocally = (canal, field, newValue) => {
-                const uiFieldMap = { 'nombre': 'Nombre', 'canal': 'Canal (Tel/WhatsApp)', 'resumen': 'Resumen Conversación', 'comentarios': 'Comentarios' };
+            const handleUpdateClientFieldLocally = (id_db, canal, field, newValue) => {
+                const uiFieldMap = {
+                    'nombre': 'Nombre',
+                    'canal': 'Canal (Tel/WhatsApp)',
+                    'telefono': 'Canal (Tel/WhatsApp)',
+                    'asesora': 'Asesora',
+                    'estado_final': 'Estado Final',
+                    'status': 'Estado Final',
+                    'resumen': 'Resumen Conversación',
+                    'comentarios': 'Comentarios'
+                };
                 const mappedField = uiFieldMap[field] || field;
+                const matches = (c) => (id_db && c.id_db === id_db) || c['Canal (Tel/WhatsApp)'] === canal;
 
-                setClients(prev => prev.map(c => c['Canal (Tel/WhatsApp)'] === canal ? { ...c, [mappedField]: newValue } : c));
-                if (modalClient && modalClient['Canal (Tel/WhatsApp)'] === canal) {
+                setClients(prev => prev.map(c => matches(c) ? { ...c, [mappedField]: newValue } : c));
+                if (modalClient && matches(modalClient)) {
                     setModalClient(prev => ({ ...prev, [mappedField]: newValue }));
                 }
             };
@@ -460,6 +493,7 @@
 
                     <div className="w-full max-w-[98%] mx-auto chrome-tab-container mb-0">
                         <button onClick={() => setMainTab('dashboard')} className={`chrome-tab ${mainTab === 'dashboard' ? 'chrome-tab-active' : ''}`} style={mainTab === 'dashboard' ? { color: activeTheme.primary } : {}}><i className="fas fa-chart-line text-xs"></i> Dashboard</button>
+                        <button onClick={() => { setMainTab('pool'); fetchPoolSummary(); }} className={`chrome-tab ${mainTab === 'pool' ? 'chrome-tab-active' : ''}`} style={mainTab === 'pool' ? { color: activeTheme.primary } : {}}><i className="fas fa-layer-group text-xs"></i> Pool Asesoras</button>
                         <button onClick={() => setMainTab('cola')} className={`chrome-tab ${mainTab === 'cola' ? 'chrome-tab-active' : ''}`} style={mainTab === 'cola' ? { color: activeTheme.primary } : {}}>
                             <i className="fas fa-tasks text-xs"></i> Cola Sync
                             {localQueue.length > 0 && <span className="ml-2 w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>}
@@ -588,7 +622,7 @@
                                                 ))}
                                                 {filteredClients.length === 0 && (
                                                     <tr>
-                                                        <td colSpan="7" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">No se encontraron expedientes</td>
+                                                        <td colSpan="8" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">No se encontraron expedientes</td>
                                                     </tr>
                                                 )}
                                             </tbody>
@@ -620,6 +654,55 @@
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {mainTab === 'pool' && (
+                            <div className="space-y-6 animate-in fade-in duration-500">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Asesoras Activas</p><h4 className="text-2xl font-black text-slate-800">{poolSummary.length}</h4></div>
+                                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600 text-xl shadow-inner"><i className="fas fa-users"></i></div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Clientes en Pool</p><h4 className="text-2xl font-black text-sky-600">{poolSummary.reduce((acc, r) => acc + (r.tiene || 0), 0)}</h4></div>
+                                        <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600 text-xl shadow-inner"><i className="fas fa-user-check"></i></div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Faltantes (Meta 80)</p><h4 className="text-2xl font-black text-amber-500">{poolSummary.reduce((acc, r) => acc + (r.faltan || 0), 0)}</h4></div>
+                                        <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 text-xl shadow-inner"><i className="fas fa-hourglass-half"></i></div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-[2rem] shadow-sm overflow-hidden border border-slate-100">
+                                    <div className="overflow-x-auto custom-scroll">
+                                        <table className="w-full text-left table-auto">
+                                            <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b">
+                                                <tr>
+                                                    <th className="px-6 py-4">Asesora</th>
+                                                    <th className="px-6 py-4 text-center">Tiene (Pool)</th>
+                                                    <th className="px-6 py-4 text-center">Le Faltan (de 80)</th>
+                                                    <th className="px-6 py-4 text-center">Tomados Hoy</th>
+                                                    <th className="px-6 py-4 text-center">Faltan Hoy (de 10)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-xs">
+                                                {poolSummary.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="px-6 py-4 font-black text-slate-700 uppercase text-[11px]">{row.asesora}</td>
+                                                        <td className="px-6 py-4 text-center font-black text-sky-600 text-sm">{row.tiene}</td>
+                                                        <td className="px-6 py-4 text-center font-black text-amber-600 text-sm">{row.faltan}</td>
+                                                        <td className="px-6 py-4 text-center font-black text-emerald-600 text-sm">{row.hoy}</td>
+                                                        <td className="px-6 py-4 text-center font-black text-slate-500 text-sm">{row.faltan_hoy}</td>
+                                                    </tr>
+                                                ))}
+                                                {poolSummary.length === 0 && (
+                                                    <tr><td colSpan="5" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">Sin datos de pool</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -702,6 +785,8 @@
                         <ClientViewer
                             client={modalClient}
                             permisos={permisos}
+                            user={user}
+                            agents={agents}
                             onUpdate={handleUpdateClientFieldLocally}
                             onClose={() => setModalClient(null)}
                             activeColor={activeTheme.primary}
@@ -742,11 +827,24 @@
             return <div className="h-40 flex items-center justify-center"><canvas ref={canvasRef}></canvas></div>;
         };
 
-        const ClientViewer = ({ client, permisos, onUpdate, onClose, activeColor }) => {
+        const ClientViewer = ({ client, permisos, user, agents, onUpdate, onClose, activeColor }) => {
             const [tab, setTab] = useState('base');
             const [editingField, setEditingField] = useState(null);
             const [tempValue, setTempValue] = useState('');
+            const [notesText, setNotesText] = useState(client['Comentarios'] || '');
+            const [notesStatus, setNotesStatus] = useState('');
             const [saving, setSaving] = useState(false);
+
+            // Confirmación con contraseña para Super Admin
+            const [pendingConfirm, setPendingConfirm] = useState(null);
+            const [adminPassword, setAdminPassword] = useState('');
+            const [confirmError, setConfirmError] = useState('');
+
+            const superAdmin = isSuperAdmin(permisos);
+
+            useEffect(() => {
+                setNotesText(client['Comentarios'] || '');
+            }, [client]);
 
             const followUps = useMemo(() => {
                 let list = [];
@@ -758,28 +856,90 @@
                 return list.reverse();
             }, [client]);
 
-            const handleSaveField = async (fieldKey, currentValue) => {
-                if (tempValue === currentValue && fieldKey !== 'comentarios') {
+            const FIELD_LABELS = {
+                nombre: 'Nombre',
+                canal: 'Teléfono / Canal',
+                asesora: 'Asesora Asignada',
+                estado_final: 'Status',
+                resumen: 'Resumen de Apertura'
+            };
+
+            const requestProtectedSave = (fieldKey, currentValue) => {
+                if ((tempValue || '').trim() === (currentValue || '').toString().trim()) {
                     setEditingField(null);
                     return;
                 }
+                setConfirmError('');
+                setAdminPassword('');
+                setPendingConfirm({
+                    fieldKey,
+                    label: FIELD_LABELS[fieldKey] || fieldKey,
+                    oldValue: currentValue || '---',
+                    newValue: tempValue
+                });
+            };
+
+            const executeProtectedSave = async () => {
+                if (!pendingConfirm) return;
+                if (!adminPassword.trim()) {
+                    setConfirmError('Ingresa tu contraseña para confirmar.');
+                    return;
+                }
                 setSaving(true);
+                setConfirmError('');
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/edit-client-field', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
+                            p_id: client.id_db,
                             canal: client['Canal (Tel/WhatsApp)'],
-                            field: fieldKey,
-                            new_value: tempValue
+                            field: pendingConfirm.fieldKey,
+                            new_value: pendingConfirm.newValue,
+                            auditor_nombre: user,
+                            password: adminPassword.trim()
                         })
                     });
                     const data = await res.json();
-                    if (data.status === 'success') {
-                        onUpdate(client['Canal (Tel/WhatsApp)'], fieldKey, tempValue);
+                    if (res.ok && data.status === 'success') {
+                        onUpdate(client.id_db, client['Canal (Tel/WhatsApp)'], pendingConfirm.fieldKey, data.new_value ?? pendingConfirm.newValue);
+                        setPendingConfirm(null);
                         setEditingField(null);
+                        setAdminPassword('');
+                    } else {
+                        setConfirmError(data.message || 'No se pudo guardar el cambio.');
                     }
-                } catch (e) { console.error("Error guardando campo:", e); }
+                } catch (e) {
+                    setConfirmError('Error de conexión con el servidor.');
+                }
+                setSaving(false);
+            };
+
+            const handleSaveNotes = async () => {
+                setSaving(true);
+                setNotesStatus('');
+                try {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/edit-client-field', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            p_id: client.id_db,
+                            canal: client['Canal (Tel/WhatsApp)'],
+                            field: 'comentarios',
+                            new_value: notesText
+                        })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.status === 'success') {
+                        onUpdate(client.id_db, client['Canal (Tel/WhatsApp)'], 'comentarios', notesText);
+                        setNotesStatus('Guardado correctamente');
+                        setTimeout(() => setNotesStatus(''), 2500);
+                    } else {
+                        setNotesStatus(data.message || 'Error al guardar');
+                    }
+                } catch (e) {
+                    setNotesStatus('Error de conexión');
+                }
                 setSaving(false);
             };
 
@@ -788,21 +948,27 @@
                 setEditingField(field);
             };
 
+            const agentOptions = useMemo(() => {
+                const set = new Set(agents || []);
+                if (client.Asesora && client.Asesora !== 'Sin Asesora') set.add(client.Asesora);
+                return Array.from(set);
+            }, [agents, client.Asesora]);
+
             return (
                 <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden animate-in zoom-in duration-300">
+                    <div className="bg-white w-full max-w-5xl rounded-[3rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden animate-in zoom-in duration-300 relative">
                         <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white">
                             <div className="flex-1">
                                 {editingField === 'nombre' ? (
                                     <div className="flex items-center gap-2">
                                         <input className="text-xl font-black text-slate-800 border-b-2 border-blue-500 outline-none bg-transparent min-w-[300px]" value={tempValue} onChange={e => setTempValue(e.target.value)} autoFocus />
-                                        <button onClick={() => handleSaveField('nombre', client.Nombre)} className="text-emerald-500 bg-transparent border-none cursor-pointer"><i className={`fas ${saving ? 'fa-spinner animate-spin' : 'fa-check'}`}></i></button>
-                                        <button onClick={() => setEditingField(null)} className="text-red-400 bg-transparent border-none cursor-pointer"><i className="fas fa-times"></i></button>
+                                        <button onClick={() => requestProtectedSave('nombre', client.Nombre)} className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-pointer hover:bg-emerald-100"><i className={`fas ${saving ? 'fa-spinner animate-spin' : 'fa-check'}`}></i></button>
+                                        <button onClick={() => setEditingField(null)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 border border-red-200 cursor-pointer hover:bg-red-100"><i className="fas fa-times"></i></button>
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-xl font-black text-slate-800 tracking-tighter leading-none">{client.Nombre}</h3>
-                                        {permisos === PERMISOS.SUPERIOR && <button onClick={() => startEditing('nombre', client.Nombre)} className="text-sky-400 bg-transparent border-none cursor-pointer hover:text-sky-600"><i className="fas fa-pen text-xs"></i></button>}
+                                        {superAdmin && <button onClick={() => startEditing('nombre', client.Nombre)} title="Editar Nombre" className="text-sky-400 bg-transparent border-none cursor-pointer hover:text-sky-600"><i className="fas fa-pen text-xs"></i></button>}
                                     </div>
                                 )}
                                 <p className="text-[9px] font-black text-slate-300 mt-2 tracking-[0.15em] uppercase">Expediente Digital Auditado • {client['Canal (Tel/WhatsApp)']}</p>
@@ -817,33 +983,85 @@
                         <div className="flex-1 p-8 overflow-y-auto custom-scroll bg-white">
                             {tab === 'base' && (
                                 <div className="space-y-8 animate-in fade-in duration-300">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                        <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Asesora Responsable</p><div className="read-only-box italic">{client.Asesora}</div></div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                                        {/* Asesora Responsable */}
                                         <div className="space-y-1.5">
-                                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Contacto</p>
-                                            <div className="read-only-box">{client['Canal (Tel/WhatsApp)']}</div>
+                                            <div className="flex items-center justify-between px-1">
+                                                <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Asesora Asignada</p>
+                                                {superAdmin && editingField !== 'asesora' && <button onClick={() => startEditing('asesora', client.Asesora)} title="Cambiar Asesora" className="text-sky-400 bg-transparent border-none cursor-pointer hover:text-sky-600"><i className="fas fa-pen text-[9px]"></i></button>}
+                                            </div>
+                                            {editingField === 'asesora' ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <select className="w-full p-2.5 rounded-xl bg-white border border-sky-400 text-xs font-bold outline-none" value={tempValue} onChange={e => setTempValue(e.target.value)}>
+                                                        {agentOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                                                    </select>
+                                                    <button onClick={() => requestProtectedSave('asesora', client.Asesora)} className="p-2 rounded-lg bg-emerald-500 text-white border-none cursor-pointer"><i className="fas fa-check text-[10px]"></i></button>
+                                                    <button onClick={() => setEditingField(null)} className="p-2 rounded-lg bg-slate-100 text-slate-500 border-none cursor-pointer"><i className="fas fa-times text-[10px]"></i></button>
+                                                </div>
+                                            ) : (
+                                                <div className="read-only-box italic">{client.Asesora}</div>
+                                            )}
                                         </div>
+
+                                        {/* Teléfono / Contacto */}
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between px-1">
+                                                <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Teléfono</p>
+                                                {superAdmin && editingField !== 'canal' && <button onClick={() => startEditing('canal', client['Canal (Tel/WhatsApp)'])} title="Editar Teléfono" className="text-sky-400 bg-transparent border-none cursor-pointer hover:text-sky-600"><i className="fas fa-pen text-[9px]"></i></button>}
+                                            </div>
+                                            {editingField === 'canal' ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <input type="text" className="w-full p-2.5 rounded-xl bg-white border border-sky-400 text-xs font-bold outline-none" value={tempValue} onChange={e => setTempValue(e.target.value)} autoFocus />
+                                                    <button onClick={() => requestProtectedSave('canal', client['Canal (Tel/WhatsApp)'])} className="p-2 rounded-lg bg-emerald-500 text-white border-none cursor-pointer"><i className="fas fa-check text-[10px]"></i></button>
+                                                    <button onClick={() => setEditingField(null)} className="p-2 rounded-lg bg-slate-100 text-slate-500 border-none cursor-pointer"><i className="fas fa-times text-[10px]"></i></button>
+                                                </div>
+                                            ) : (
+                                                <div className="read-only-box">{client['Canal (Tel/WhatsApp)']}</div>
+                                            )}
+                                        </div>
+
+                                        {/* Status / Estado Final */}
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between px-1">
+                                                <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Status</p>
+                                                {superAdmin && editingField !== 'estado_final' && <button onClick={() => startEditing('estado_final', client['Estado Final'])} title="Cambiar Status" className="text-sky-400 bg-transparent border-none cursor-pointer hover:text-sky-600"><i className="fas fa-pen text-[9px]"></i></button>}
+                                            </div>
+                                            {editingField === 'estado_final' ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <select className="w-full p-2.5 rounded-xl bg-white border border-sky-400 text-xs font-bold outline-none" value={tempValue} onChange={e => setTempValue(e.target.value)}>
+                                                        {ESTADO_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                                                    </select>
+                                                    <button onClick={() => requestProtectedSave('estado_final', client['Estado Final'])} className="p-2 rounded-lg bg-emerald-500 text-white border-none cursor-pointer"><i className="fas fa-check text-[10px]"></i></button>
+                                                    <button onClick={() => setEditingField(null)} className="p-2 rounded-lg bg-slate-100 text-slate-500 border-none cursor-pointer"><i className="fas fa-times text-[10px]"></i></button>
+                                                </div>
+                                            ) : (
+                                                <div className="read-only-box font-black text-slate-700">{client['Estado Final']}</div>
+                                            )}
+                                        </div>
+
                                         <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Registro Inicial</p><div className="read-only-box">{client['Fecha 1er Contacto']}</div></div>
                                         <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Próxima Cita</p><div className="read-only-box text-sky-600 font-black">{client['Fecha Próx. Contacto'] || '--'}</div></div>
                                     </div>
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-2">
                                             <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Resumen de Apertura</p>
-                                            {permisos === PERMISOS.SUPERIOR && <button onClick={() => startEditing('resumen', client['Resumen Conversación'])} className="text-sky-500 border-none bg-transparent cursor-pointer"><i className="fas fa-pen text-[9px]"></i></button>}
+                                            {superAdmin && <button onClick={() => startEditing('resumen', client['Resumen Conversación'])} className="text-sky-500 border-none bg-transparent cursor-pointer"><i className="fas fa-pen text-[9px]"></i></button>}
                                         </div>
                                         {editingField === 'resumen' ? (
                                             <div className="flex flex-col gap-2">
                                                 <textarea className="p-4 bg-white border border-blue-400 rounded-[2.5rem] font-medium text-slate-600 italic leading-relaxed text-[11px] outline-none min-h-[80px]" value={tempValue} onChange={e => setTempValue(e.target.value)} autoFocus></textarea>
                                                 <div className="flex items-center gap-2 justify-end">
                                                     <button onClick={() => setEditingField(null)} className="px-4 py-2 rounded-xl text-[10px] font-bold bg-slate-100 border-none cursor-pointer">Cancelar</button>
-                                                    <button onClick={() => handleSaveField('resumen', client['Resumen Conversación'])} className="px-4 py-2 rounded-xl text-[10px] font-bold bg-emerald-500 text-white border-none cursor-pointer">Guardar</button>
+                                                    <button onClick={() => requestProtectedSave('resumen', client['Resumen Conversación'])} className="px-4 py-2 rounded-xl text-[10px] font-bold bg-emerald-500 text-white border-none cursor-pointer">Guardar</button>
                                                 </div>
                                             </div>
                                         ) : (
                                             <div className="p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] font-medium text-slate-600 italic leading-relaxed text-[11px]">"{client['Resumen Conversación'] || 'Sin resumen registrado.'}"</div>
                                         )}
                                     </div>
-                                    <div className="mt-4 flex justify-center"><button onClick={() => window.open(client.Imagenes, '_blank')} className="px-10 py-4 bg-sky-50 text-sky-600 border border-sky-100 rounded-[2rem] font-black uppercase text-[10px] tracking-widest hover:bg-sky-600 hover:text-white transition-all flex items-center gap-2 shadow-lg border-none outline-none cursor-pointer"><i className="fab fa-google-drive text-lg"></i> DRIVE EVIDENCIAS</button></div>
+                                    {client.Imagenes && (
+                                        <div className="mt-4 flex justify-center"><button onClick={() => window.open(client.Imagenes, '_blank')} className="px-10 py-4 bg-sky-50 text-sky-600 border border-sky-100 rounded-[2rem] font-black uppercase text-[10px] tracking-widest hover:bg-sky-600 hover:text-white transition-all flex items-center gap-2 shadow-lg border-none outline-none cursor-pointer"><i className="fab fa-google-drive text-lg"></i> DRIVE EVIDENCIAS</button></div>
+                                    )}
                                 </div>
                             )}
                             {tab === 'hist' && (
@@ -865,11 +1083,52 @@
                             )}
                             {tab === 'comm' && (
                                 <div className="space-y-4 h-full animate-in fade-in duration-300 flex flex-col">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">Anotaciones de Auditoría</label>
-                                    <textarea className="w-full p-8 bg-slate-50 rounded-[3rem] font-medium text-xs flex-1 border border-slate-100 shadow-inner outline-none focus:border-blue-200 transition-colors" placeholder="Notas internas exclusivas del auditor..." value={tempValue} onChange={e => setTempValue(e.target.value)} onFocus={() => setTempValue(client['Comentarios'] || '')} onBlur={() => handleSaveField('comentarios', client.Comentarios)}></textarea>
+                                    <div className="flex items-center justify-between px-4">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Anotaciones de Auditoría</label>
+                                        <div className="flex items-center gap-3">
+                                            {notesStatus && <span className="text-[10px] font-bold text-emerald-600">{notesStatus}</span>}
+                                            <button onClick={handleSaveNotes} disabled={saving} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-sky-500 text-white border-none cursor-pointer hover:bg-sky-600 transition-colors disabled:opacity-50">
+                                                {saving ? 'Guardando...' : 'Guardar Notas'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <textarea className="w-full p-8 bg-slate-50 rounded-[3rem] font-medium text-xs flex-1 border border-slate-100 shadow-inner outline-none focus:border-blue-200 transition-colors" placeholder="Notas internas exclusivas del auditor..." value={notesText} onChange={e => setNotesText(e.target.value)}></textarea>
                                 </div>
                             )}
                         </div>
+
+                        {pendingConfirm && (
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+                                <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border border-white animate-in zoom-in duration-200">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center"><i className="fas fa-lock"></i></div>
+                                        <div>
+                                            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Confirmar Modificación</h4>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Seguridad Super Admin</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 rounded-2xl mb-4 text-xs space-y-1 border border-slate-100">
+                                        <p className="font-black text-slate-500 uppercase text-[9px] tracking-widest">{pendingConfirm.label}</p>
+                                        <p className="text-slate-400 line-through">{pendingConfirm.oldValue}</p>
+                                        <p className="text-slate-800 font-black">{pendingConfirm.newValue}</p>
+                                    </div>
+                                    <input
+                                        type="password"
+                                        placeholder="Contraseña de Super Admin..."
+                                        className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border border-slate-200 outline-none focus:border-sky-400 mb-3"
+                                        value={adminPassword}
+                                        onChange={e => setAdminPassword(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') executeProtectedSave(); }}
+                                        autoFocus
+                                    />
+                                    {confirmError && <p className="text-red-500 text-[11px] font-bold mb-3 px-1">{confirmError}</p>}
+                                    <div className="grid grid-cols-2 gap-3 mt-2">
+                                        <button onClick={() => { setPendingConfirm(null); setConfirmError(''); }} disabled={saving} className="py-3 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest border-none cursor-pointer hover:bg-slate-200">Cancelar</button>
+                                        <button onClick={executeProtectedSave} disabled={saving} className="py-3 bg-emerald-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest border-none cursor-pointer hover:bg-emerald-600 shadow-md disabled:opacity-50">{saving ? 'Guardando...' : 'Confirmar'}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             );

@@ -658,5 +658,128 @@ class DataHandler:
             return {"status": "error", "message": str(e), "code": 500}
     # --- FIN MÓDULO POOL ---
 
+    def get_pool_audit_summary(self):
+        """Retorna únicamente conteos numéricos de clientes en Pool por cada asesora activa."""
+        try:
+            asesoras = self.obtener_asesoras_activas()
+            tz_mex = pytz.timezone('America/Mexico_City')
+            now_mx = datetime.now(tz_mex)
+            today_mx = now_mx.date()
+
+            blocked_res = self.supabase.table("AGENDA_OBSOLETA") \
+                .select("status, updated_at") \
+                .like("status", "BLOQUEADO_%") \
+                .execute()
+
+            counts = {}
+            for a in asesoras:
+                counts[self._normalize(a)] = {"asesora": a, "tiene": 0, "hoy": 0}
+
+            for item in (blocked_res.data or []):
+                st = str(item.get('status') or '')
+                if not st.startswith("BLOQUEADO_"):
+                    continue
+                asesora_raw = st[len("BLOQUEADO_"):]
+                key = self._normalize(asesora_raw)
+                if key not in counts:
+                    counts[key] = {"asesora": asesora_raw, "tiene": 0, "hoy": 0}
+
+                counts[key]["tiene"] += 1
+                up_str = item.get('updated_at')
+                if up_str:
+                    try:
+                        dt = datetime.fromisoformat(str(up_str).replace('Z', '+00:00'))
+                        if not dt.tzinfo:
+                            dt = tz_mex.localize(dt)
+                        else:
+                            dt = dt.astimezone(tz_mex)
+                        if dt.date() == today_mx:
+                            counts[key]["hoy"] += 1
+                    except Exception:
+                        pass
+
+            summary = []
+            for entry in counts.values():
+                tiene = entry["tiene"]
+                hoy = entry["hoy"]
+                summary.append({
+                    "asesora": entry["asesora"],
+                    "tiene": tiene,
+                    "faltan": max(0, 80 - tiene),
+                    "hoy": hoy,
+                    "faltan_hoy": max(0, 10 - hoy)
+                })
+            return summary
+        except Exception as e:
+            logger.error(f"Error POOL AUDIT SUMMARY: {e}")
+            return []
+
+    def edit_client_field(self, p_id, canal, field, new_value, auditor_nombre=None, password=None):
+        """Permite editar campos de un prospecto. Campos sensibles requieren Super Admin y contraseña."""
+        if not self.supabase:
+            return {"status": "error", "message": "Base de datos no disponible.", "code": 500}
+
+        field_map = {
+            "nombre": "nombre",
+            "canal": "canal",
+            "telefono": "canal",
+            "asesora": "asesora",
+            "estado_final": "estado_final",
+            "status": "estado_final",
+            "resumen": "resumen",
+            "comentarios": "comentarios"
+        }
+        col = field_map.get(str(field or "").strip().lower())
+        if not col:
+            return {"status": "error", "message": "Campo no permitido.", "code": 400}
+
+        protected_cols = {"nombre", "canal", "asesora", "estado_final", "resumen"}
+        if col in protected_cols:
+            if not auditor_nombre or not password:
+                return {"status": "error", "message": "Se requiere contraseña de Super Admin.", "code": 401}
+            auditores = self.sheets.obtener_datos_hoja("Auditores")
+            match = next(
+                (a for a in auditores if self._normalize(a.get('Nombre') or '') == self._normalize(auditor_nombre)),
+                None
+            )
+            if not match or str(match.get('Contraseña') or '').strip() != str(password).strip():
+                return {"status": "error", "message": "Contraseña de Super Admin incorrecta.", "code": 401}
+            permiso_norm = self._normalize(match.get('Permisos') or '')
+            if permiso_norm not in ("superior", "super admin", "superadmin"):
+                return {"status": "error", "message": "Solo Super Admin puede modificar este campo.", "code": 403}
+
+        try:
+            tz_mex = pytz.timezone('America/Mexico_City')
+            val_to_save = str(new_value).strip() if new_value is not None else ""
+
+            if col == "canal":
+                cleaned = self._limpiar_canal(val_to_save)
+                if not cleaned:
+                    return {"status": "error", "message": "Teléfono/Canal inválido.", "code": 400}
+                dup = self.supabase.table("prospectos").select("id").eq("canal", cleaned).execute()
+                if dup.data:
+                    for row in dup.data:
+                        if str(row.get('id')) != str(p_id):
+                            return {"status": "error", "message": "Ese teléfono ya está registrado en otro expediente.", "code": 409}
+                val_to_save = cleaned
+
+            payload = {
+                col: val_to_save,
+                "updated_at": datetime.now(tz_mex).isoformat()
+            }
+
+            if p_id:
+                self.supabase.table("prospectos").update(payload).eq("id", p_id).execute()
+            elif canal:
+                canal_limpio = self._limpiar_canal(canal)
+                self.supabase.table("prospectos").update(payload).eq("canal", canal_limpio).execute()
+            else:
+                return {"status": "error", "message": "Identificador de prospecto requerido.", "code": 400}
+
+            return {"status": "success", "field": col, "new_value": val_to_save}
+        except Exception as e:
+            logger.error(f"Error EDIT CLIENT FIELD: {e}")
+            return {"status": "error", "message": str(e), "code": 500}
+
 # Instancia global
 handler = DataHandler()
