@@ -474,7 +474,7 @@ class DataHandler:
                         if not dt.tzinfo:
                             dt = tz_mex.localize(dt)
                         diff = (now_mx - dt).days
-                        if diff > 5:
+                        if diff > 8:
                             # Si el apartado caducó, se modifica el status a vacío
                             item['status'] = ''
                     except: pass
@@ -521,9 +521,31 @@ class DataHandler:
         try:
             tz_mex = pytz.timezone('America/Mexico_City')
             now_mx = datetime.now(tz_mex)
-            limit_check = self.supabase.table("AGENDA_OBSOLETA").select("folio_i").eq("status", f"BLOQUEADO_{asesora_nombre}").execute()
-            if limit_check.data and len(limit_check.data) >= 10:
-                return {"status": "error", "message": "Límite de 10 prospectos alcanzado.", "code": 403}
+            limit_check = self.supabase.table("AGENDA_OBSOLETA") \
+                .select("folio_i, updated_at") \
+                .eq("status", f"BLOQUEADO_{asesora_nombre}") \
+                .execute()
+            blocked_rows = limit_check.data or []
+            if len(blocked_rows) >= 80:
+                return {"status": "error", "message": "Límite de 80 prospectos en posesión alcanzado.", "code": 403}
+
+            today_mx = now_mx.date()
+            taken_today = 0
+            for row in blocked_rows:
+                up_str = row.get('updated_at')
+                if up_str:
+                    try:
+                        dt = datetime.fromisoformat(str(up_str).replace('Z', '+00:00'))
+                        if not dt.tzinfo:
+                            dt = tz_mex.localize(dt)
+                        else:
+                            dt = dt.astimezone(tz_mex)
+                        if dt.date() == today_mx:
+                            taken_today += 1
+                    except Exception:
+                        pass
+            if taken_today >= 10:
+                return {"status": "error", "message": "Límite diario de 10 prospectos alcanzado. Descarta alguno de hoy para tomar más.", "code": 403}
                 
             lead_check = self.supabase.table("AGENDA_OBSOLETA").select("status, updated_at").eq("folio_i", lead_id).execute()
             if not lead_check.data:
@@ -540,7 +562,7 @@ class DataHandler:
                         dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
                         if not dt.tzinfo:
                             dt = tz_mex.localize(dt)
-                        if (now_mx - dt).days > 5:
+                        if (now_mx - dt).days > 8:
                             available = True
                     except: pass
             
