@@ -204,8 +204,8 @@ def get_auditors():
 
 @app.route('/api/login', methods=['POST'])
 def login_asesora():
-    data = request.json
-    return jsonify(handler.login_asesora(data.get('nombre')))
+    data = request.json or {}
+    return jsonify(handler.login_asesora(data.get('nombre'), data.get('password')))
 
 @app.route('/api/login-audit', methods=['POST'])
 def login_audit():

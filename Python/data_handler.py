@@ -92,6 +92,60 @@ class GoogleSheetsSync:
             return ws.get_all_records()
         except: return []
 
+    def verificar_o_guardar_password(self, nombre_norm, display_name, password, normalize_fn):
+        """
+        Busca la contraseña de la asesora en la pestaña 'Contraseñas' (o 'AsesorasActivas' si no existe).
+        Si el valor de contraseña está en blanco, guarda la primera contraseña que ingrese.
+        """
+        if not self.workbook:
+            return {"status": "error", "message": "Google Sheets no autenticado."}
+
+        ws = None
+        for sheet_name in ("Contraseñas", "AsesorasActivas"):
+            try:
+                candidate = self.workbook.worksheet(sheet_name)
+                rows = candidate.get_all_values()
+                if not rows:
+                    continue
+                headers_norm = [normalize_fn(h) for h in rows[0]]
+                pwd_col = next((i for i, h in enumerate(headers_norm) if h in ("contrasena", "password", "clave")), None)
+                if pwd_col is not None:
+                    ws = candidate
+                    break
+            except Exception:
+                continue
+
+        if not ws:
+            return {"status": "error", "message": "No se encontró columna de contraseñas en Google Sheets."}
+
+        rows = ws.get_all_values()
+        headers_norm = [normalize_fn(h) for h in rows[0]]
+        name_col = next((i for i, h in enumerate(headers_norm) if h in ("nombre", "asesora")), 0)
+        pwd_col = next((i for i, h in enumerate(headers_norm) if h in ("contrasena", "password", "clave")), None)
+
+        for idx, row in enumerate(rows[1:], start=2):
+            row_name = row[name_col] if name_col < len(row) else ""
+            if normalize_fn(row_name) == nombre_norm:
+                stored_pwd = str(row[pwd_col]).strip() if pwd_col < len(row) else ""
+                if not stored_pwd:
+                    ws.update_cell(idx, pwd_col + 1, password)
+                    logger.info(f"LOGIN: Primera contraseña registrada para {display_name} en {ws.title}")
+                    return {"status": "success", "nombre": display_name}
+                if stored_pwd == password:
+                    return {"status": "success", "nombre": display_name}
+                return {"status": "error", "message": "Contraseña incorrecta."}
+
+        # Si la asesora está activa pero aún no tiene fila en la pestaña de contraseñas, la agregamos
+        if ws.title == "Contraseñas":
+            new_row = [""] * max(name_col + 1, pwd_col + 1)
+            new_row[name_col] = display_name
+            new_row[pwd_col] = password
+            ws.append_row(new_row)
+            logger.info(f"LOGIN: Fila y primera contraseña creadas para {display_name} en {ws.title}")
+            return {"status": "success", "nombre": display_name}
+
+        return {"status": "error", "message": "Asesora no encontrada en contraseñas."}
+
     def sincronizar_prospecto_a_sheet(self, data):
         if not self.workbook:
             logger.warning("GOOGLE SHEETS: no hay libro abierto para sincronizar.")
@@ -392,23 +446,30 @@ class DataHandler:
         p.pop('seguimientos', None); p.pop('seguimientos!seguimientos_prospecto_id_fkey', None)
         return p
 
-    def login_asesora(self, nombre):
-        """Valida el acceso de la asesora comparando con la pestaña AsesorasActivas."""
-        if not nombre: return {"status": "error", "message": "Nombre requerido."}
+    def login_asesora(self, nombre, password=None):
+        """Valida el acceso de la asesora en AsesorasActivas y verifica/registra su contraseña."""
+        if not nombre or not password or not str(password).strip():
+            return {"status": "error", "message": "Nombre y contraseña requeridos."}
         try:
-            # Recuperar datos de Sheets
             asesoras = self.sheets.obtener_datos_hoja("AsesorasActivas")
             nombre_norm = self._normalize(nombre)
-            
-            # Buscar coincidencia normalizada
-            match = next((a for a in asesoras if self._normalize(a.get('Nombre', '')) == nombre_norm), None)
-            
-            if match:
-                logger.info(f"LOGIN: Acceso concedido a {match.get('Nombre')}")
-                return {"status": "success", "nombre": match.get('Nombre')}
-            
-            logger.warning(f"LOGIN: Intento fallido para {nombre}")
-            return {"status": "error", "message": "Asesora no autorizada."}
+            pwd_input = str(password).strip()
+
+            match = next(
+                (a for a in asesoras if self._normalize(a.get('nombre') or a.get('Nombre') or '') == nombre_norm),
+                None
+            )
+            if not match:
+                logger.warning(f"LOGIN: Intento fallido para {nombre}")
+                return {"status": "error", "message": "Asesora no autorizada."}
+
+            display_name = match.get('nombre') or match.get('Nombre')
+            res = self.sheets.verificar_o_guardar_password(nombre_norm, display_name, pwd_input, self._normalize)
+            if res.get("status") == "success":
+                logger.info(f"LOGIN: Acceso concedido a {display_name}")
+            else:
+                logger.warning(f"LOGIN: Acceso denegado para {display_name}: {res.get('message')}")
+            return res
         except Exception as e:
             logger.error(f"LOGIN ERROR: {e}")
             return {"status": "error", "message": "Error de conexión con base de asesoras."}
@@ -418,7 +479,7 @@ class DataHandler:
         try:
             data = self.sheets.obtener_datos_hoja("AsesorasActivas")
             # Extraer solo la columna 'Nombre' que no esté vacía
-            return [str(a.get('nombre')) for a in data if a.get('nombre')]
+            return [str(a.get('nombre') or a.get('Nombre')) for a in data if (a.get('nombre') or a.get('Nombre'))]
         except Exception as e:
             logger.error(f"DROPDOWN ERROR: {e}")
             return []
@@ -428,13 +489,6 @@ class DataHandler:
             data = self.sheets.obtener_datos_hoja("Auditores")
             return [str(a.get('Nombre')) for a in data if a.get('Nombre')]
         except: return []
-
-    def login_asesora(self, nombre):
-        try:
-            asesoras = self.sheets.obtener_datos_hoja("AsesorasActivas")
-            match = next((a for a in asesoras if str(a.get('nombre') or '').strip().lower() == str(nombre).strip().lower()), None)
-            return {"status": "success", "nombre": match.get('nombre')} if match else {"status": "error", "message": "No autorizada."}
-        except: return {"status": "error", "message": "Error de conexión."}
 
     def login_auditoria(self, nombre, password):
         try:
