@@ -475,11 +475,12 @@ class DataHandler:
             return {"status": "error", "message": "Error de conexión con base de asesoras."}
 
     def obtener_asesoras_activas(self):
-        """Retorna una lista simple de nombres para el dropdown del CRM."""
+        """Retorna una lista simple de nombres en orden alfabético para el dropdown del CRM."""
         try:
             data = self.sheets.obtener_datos_hoja("AsesorasActivas")
             # Extraer solo la columna 'Nombre' que no esté vacía
-            return [str(a.get('nombre') or a.get('Nombre')) for a in data if (a.get('nombre') or a.get('Nombre'))]
+            names = [str(a.get('nombre') or a.get('Nombre')).strip() for a in data if (a.get('nombre') or a.get('Nombre'))]
+            return sorted(names, key=lambda x: self._normalize(x))
         except Exception as e:
             logger.error(f"DROPDOWN ERROR: {e}")
             return []
@@ -682,7 +683,7 @@ class DataHandler:
                 asesora_raw = st[len("BLOQUEADO_"):]
                 key = self._normalize(asesora_raw)
                 if key not in counts:
-                    counts[key] = {"asesora": asesora_raw, "tiene": 0, "hoy": 0}
+                    continue
 
                 counts[key]["tiene"] += 1
                 up_str = item.get('updated_at')
@@ -709,6 +710,7 @@ class DataHandler:
                     "hoy": hoy,
                     "faltan_hoy": max(0, 10 - hoy)
                 })
+            summary.sort(key=lambda x: self._normalize(x["asesora"]))
             return summary
         except Exception as e:
             logger.error(f"Error POOL AUDIT SUMMARY: {e}")

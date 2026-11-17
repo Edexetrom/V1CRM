@@ -431,25 +431,36 @@
                 return counts;
             }, [processedClients]);
 
+            const normalizeStr = (s) => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
             const statusStats = useMemo(() => {
                 const total = processedClients.length;
                 const generalCounts = {};
                 ESTADO_OPTIONS.forEach(e => { generalCounts[e] = 0; });
 
+                const activeMap = {};
+                (agents || []).forEach(a => {
+                    const k = normalizeStr(a);
+                    if (k) activeMap[k] = a;
+                });
+
                 const byAgent = {};
+                Object.keys(activeMap).forEach(k => {
+                    byAgent[k] = { asesora: activeMap[k], total: 0, counts: {} };
+                    ESTADO_OPTIONS.forEach(e => { byAgent[k].counts[e] = 0; });
+                });
+
                 processedClients.forEach(c => {
                     const st = c['Estado Final'] || 'Seguimiento';
-                    const ag = c.Asesora || 'Sin Asesora';
                     if (generalCounts[st] === undefined) generalCounts[st] = 0;
                     generalCounts[st]++;
 
-                    if (!byAgent[ag]) {
-                        byAgent[ag] = { asesora: ag, total: 0, counts: {} };
-                        ESTADO_OPTIONS.forEach(e => { byAgent[ag].counts[e] = 0; });
+                    const k = normalizeStr(c.Asesora);
+                    if (byAgent[k]) {
+                        byAgent[k].total++;
+                        if (byAgent[k].counts[st] === undefined) byAgent[k].counts[st] = 0;
+                        byAgent[k].counts[st]++;
                     }
-                    byAgent[ag].total++;
-                    if (byAgent[ag].counts[st] === undefined) byAgent[ag].counts[st] = 0;
-                    byAgent[ag].counts[st]++;
                 });
 
                 const pct = (n, d) => d > 0 ? Number(((n / d) * 100).toFixed(1)) : 0;
@@ -460,7 +471,7 @@
                 }));
 
                 const perAgent = Object.values(byAgent)
-                    .sort((a, b) => b.total - a.total)
+                    .sort((a, b) => a.asesora.localeCompare(b.asesora, 'es', { sensitivity: 'base' }))
                     .map(a => ({
                         asesora: a.asesora,
                         total: a.total,
@@ -471,7 +482,7 @@
                     }));
 
                 return { total, general, perAgent };
-            }, [processedClients]);
+            }, [processedClients, agents]);
 
             // --- ACCIONES DE EDICIÓN ---
             const handleUpdateClientFieldLocally = (id_db, canal, field, newValue) => {
@@ -670,7 +681,7 @@
                                     <input type="date" title="Filtrar por Fecha de Registro" className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none text-slate-400" value={filters.fechaRegistro} onChange={e => setFilters({ ...filters, fechaRegistro: e.target.value })} />
                                     <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none" value={filters.asesora} onChange={e => setFilters({ ...filters, asesora: e.target.value })}>
                                         <option value="">Asesoras</option>
-                                        {[...new Set(clients.map(c => c.Asesora))].filter(Boolean).map(a => <option key={a} value={a}>{a}</option>)}
+                                        {[...agents].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })).map(a => <option key={a} value={a}>{a}</option>)}
                                     </select>
                                     <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none" value={filters.interes} onChange={e => setFilters({ ...filters, interes: e.target.value })}>
                                         <option value="">Interés</option>
