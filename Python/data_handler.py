@@ -528,7 +528,7 @@ class DataHandler:
                         if not dt.tzinfo:
                             dt = tz_mex.localize(dt)
                         diff = (now_mx - dt).days
-                        if diff > 8:
+                        if diff > 30:
                             # Si el apartado caducó, se modifica el status a vacío
                             item['status'] = ''
                     except: pass
@@ -580,8 +580,8 @@ class DataHandler:
                 .eq("status", f"BLOQUEADO_{asesora_nombre}") \
                 .execute()
             blocked_rows = limit_check.data or []
-            if len(blocked_rows) >= 80:
-                return {"status": "error", "message": "Límite de 80 prospectos en posesión alcanzado.", "code": 403}
+            if len(blocked_rows) >= 250:
+                return {"status": "error", "message": "Límite de 250 prospectos en posesión alcanzado.", "code": 403}
 
             today_mx = now_mx.date()
             taken_today = 0
@@ -616,7 +616,7 @@ class DataHandler:
                         dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
                         if not dt.tzinfo:
                             dt = tz_mex.localize(dt)
-                        if (now_mx - dt).days > 8:
+                        if (now_mx - dt).days > 30:
                             available = True
                     except: pass
             
@@ -705,7 +705,7 @@ class DataHandler:
                 summary.append({
                     "asesora": entry["asesora"],
                     "tiene": tiene,
-                    "faltan": max(0, 80 - tiene),
+                    "faltan": max(0, 250 - tiene),
                     "hoy": hoy,
                     "faltan_hoy": max(0, 10 - hoy)
                 })

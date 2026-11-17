@@ -430,6 +430,48 @@
                 return counts;
             }, [processedClients]);
 
+            const statusStats = useMemo(() => {
+                const total = processedClients.length;
+                const generalCounts = {};
+                ESTADO_OPTIONS.forEach(e => { generalCounts[e] = 0; });
+
+                const byAgent = {};
+                processedClients.forEach(c => {
+                    const st = c['Estado Final'] || 'Seguimiento';
+                    const ag = c.Asesora || 'Sin Asesora';
+                    if (generalCounts[st] === undefined) generalCounts[st] = 0;
+                    generalCounts[st]++;
+
+                    if (!byAgent[ag]) {
+                        byAgent[ag] = { asesora: ag, total: 0, counts: {} };
+                        ESTADO_OPTIONS.forEach(e => { byAgent[ag].counts[e] = 0; });
+                    }
+                    byAgent[ag].total++;
+                    if (byAgent[ag].counts[st] === undefined) byAgent[ag].counts[st] = 0;
+                    byAgent[ag].counts[st]++;
+                });
+
+                const pct = (n, d) => d > 0 ? Number(((n / d) * 100).toFixed(1)) : 0;
+                const general = ESTADO_OPTIONS.map(e => ({
+                    status: e,
+                    count: generalCounts[e] || 0,
+                    pct: pct(generalCounts[e] || 0, total)
+                }));
+
+                const perAgent = Object.values(byAgent)
+                    .sort((a, b) => b.total - a.total)
+                    .map(a => ({
+                        asesora: a.asesora,
+                        total: a.total,
+                        statuses: ESTADO_OPTIONS.reduce((acc, e) => {
+                            acc[e] = { count: a.counts[e] || 0, pct: pct(a.counts[e] || 0, a.total) };
+                            return acc;
+                        }, {})
+                    }));
+
+                return { total, general, perAgent };
+            }, [processedClients]);
+
             // --- ACCIONES DE EDICIÓN ---
             const handleUpdateClientFieldLocally = (id_db, canal, field, newValue) => {
                 const uiFieldMap = {
@@ -533,6 +575,73 @@
                                     <div className="glass p-6 rounded-[2.5rem] border border-white shadow-sm min-h-[260px]">
                                         <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-4">Rendimiento Citas</h3>
                                         <ChartPie data={processedClients} groupBy="Rendimiento" activeColor={activeTheme.primary} />
+                                    </div>
+                                </div>
+
+                                {/* --- DISTRIBUCIÓN DE STATUS POR % (GENERAL Y POR ASESORA) --- */}
+                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                                        <div>
+                                            <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Distribución de Status (%)</h3>
+                                            <p className="text-[9px] font-bold text-slate-400">Porcentaje general de todas las asesoras y desglose individual</p>
+                                        </div>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Universo: {statusStats.total}</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {statusStats.general.map(item => {
+                                            const badgeColor = item.status === 'Venta' ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                                : item.status === 'No interesado' ? 'bg-red-50 border-red-200 text-red-700'
+                                                : item.status === 'Contactar más tarde' ? 'bg-sky-50 border-sky-200 text-sky-700'
+                                                : 'bg-amber-50 border-amber-200 text-amber-700';
+                                            return (
+                                                <div key={item.status} className={`p-4 rounded-2xl border ${badgeColor} flex items-center justify-between`}>
+                                                    <div>
+                                                        <p className="text-[9px] font-black uppercase tracking-widest opacity-80">{item.status}</p>
+                                                        <p className="text-xl font-black mt-0.5">{item.pct}%</p>
+                                                    </div>
+                                                    <span className="text-xs font-black opacity-70">{item.count}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="overflow-x-auto custom-scroll border border-slate-100 rounded-2xl">
+                                        <table className="w-full text-left table-auto">
+                                            <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-5 py-3">Asesora</th>
+                                                    <th className="px-5 py-3 text-center">Total</th>
+                                                    {ESTADO_OPTIONS.map(e => (
+                                                        <th key={e} className="px-5 py-3 text-center">{e}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-xs">
+                                                {statusStats.perAgent.map((ag, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="px-5 py-3 font-black text-slate-700 uppercase text-[10px]">{ag.asesora}</td>
+                                                        <td className="px-5 py-3 text-center font-black text-slate-500">{ag.total}</td>
+                                                        {ESTADO_OPTIONS.map(e => {
+                                                            const st = ag.statuses[e];
+                                                            const txtColor = e === 'Venta' ? 'text-emerald-600'
+                                                                : e === 'No interesado' ? 'text-red-500'
+                                                                : e === 'Contactar más tarde' ? 'text-sky-600'
+                                                                : 'text-amber-600';
+                                                            return (
+                                                                <td key={e} className="px-5 py-3 text-center">
+                                                                    <span className={`font-black ${txtColor}`}>{st.pct}%</span>
+                                                                    <span className="text-[10px] font-bold text-slate-400 ml-1">({st.count})</span>
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                                {statusStats.perAgent.length === 0 && (
+                                                    <tr><td colSpan={2 + ESTADO_OPTIONS.length} className="py-8 text-center opacity-30 font-black uppercase text-[10px] tracking-widest">Sin datos</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
 
@@ -670,7 +779,7 @@
                                         <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600 text-xl shadow-inner"><i className="fas fa-user-check"></i></div>
                                     </div>
                                     <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
-                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Faltantes (Meta 80)</p><h4 className="text-2xl font-black text-amber-500">{poolSummary.reduce((acc, r) => acc + (r.faltan || 0), 0)}</h4></div>
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Faltantes (Meta 250)</p><h4 className="text-2xl font-black text-amber-500">{poolSummary.reduce((acc, r) => acc + (r.faltan || 0), 0)}</h4></div>
                                         <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 text-xl shadow-inner"><i className="fas fa-hourglass-half"></i></div>
                                     </div>
                                 </div>
@@ -682,7 +791,7 @@
                                                 <tr>
                                                     <th className="px-6 py-4">Asesora</th>
                                                     <th className="px-6 py-4 text-center">Tiene (Pool)</th>
-                                                    <th className="px-6 py-4 text-center">Le Faltan (de 80)</th>
+                                                    <th className="px-6 py-4 text-center">Le Faltan (de 250)</th>
                                                     <th className="px-6 py-4 text-center">Tomados Hoy</th>
                                                     <th className="px-6 py-4 text-center">Faltan Hoy (de 10)</th>
                                                 </tr>
