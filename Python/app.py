@@ -221,7 +221,8 @@ def get_journal_tail(): return jsonify(["[SISTEMA] Motor v1.10 Activo", "[DB] Si
 # --- INICIO MÓDULO POOL ---
 @app.route('/api/pool', methods=['GET'])
 def get_pool():
-    return jsonify(handler.get_pool_clients())
+    asesora = request.args.get('asesora')
+    return jsonify(handler.get_pool_clients(asesora))
 
 @app.route('/api/pool/take', methods=['POST', 'OPTIONS'])
 def take_pool():

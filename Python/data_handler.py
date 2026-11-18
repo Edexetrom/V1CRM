@@ -10,6 +10,7 @@ from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv, find_dotenv
 from supabase import create_client, Client
 import re
+import time
 import pytz
 # Carga de variables de entorno desde el directorio del proyecto o padres
 dotenv_path = find_dotenv()
@@ -38,6 +39,8 @@ class GoogleSheetsSync:
         self.client = None
         self.workbook = None
         self.creds = None
+        self._sheet_cache = {}
+        self._cache_ttl = 60
         self._authenticate()
 
     def _authenticate(self):
@@ -85,12 +88,19 @@ class GoogleSheetsSync:
             return res.json()
         except: return {"status": "error"}
 
-    def obtener_datos_hoja(self, nombre_hoja):
+    def obtener_datos_hoja(self, nombre_hoja, force_refresh=False):
         if not self.workbook: return []
+        now = time.time()
+        cached = self._sheet_cache.get(nombre_hoja)
+        if not force_refresh and cached and (now - cached[0]) < self._cache_ttl:
+            return cached[1]
         try:
             ws = self.workbook.worksheet(nombre_hoja)
-            return ws.get_all_records()
-        except: return []
+            records = ws.get_all_records()
+            self._sheet_cache[nombre_hoja] = (now, records)
+            return records
+        except:
+            return cached[1] if cached else []
 
     def verificar_o_guardar_password(self, nombre_norm, display_name, password, normalize_fn):
         """
@@ -129,6 +139,7 @@ class GoogleSheetsSync:
                 stored_pwd = str(row[pwd_col]).strip() if pwd_col < len(row) else ""
                 if not stored_pwd:
                     ws.update_cell(idx, pwd_col + 1, password)
+                    self._sheet_cache.pop(ws.title, None)
                     logger.info(f"LOGIN: Primera contraseña registrada para {display_name} en {ws.title}")
                     return {"status": "success", "nombre": display_name}
                 if stored_pwd == password:
@@ -141,6 +152,7 @@ class GoogleSheetsSync:
             new_row[name_col] = display_name
             new_row[pwd_col] = password
             ws.append_row(new_row)
+            self._sheet_cache.pop(ws.title, None)
             logger.info(f"LOGIN: Fila y primera contraseña creadas para {display_name} en {ws.title}")
             return {"status": "success", "nombre": display_name}
 
@@ -387,19 +399,22 @@ class DataHandler:
             return True, "Borrado con éxito."
         except Exception as e: return False, str(e)
 
+    TZ_MEX = pytz.timezone('America/Mexico_City')
+
     def get_all_clients(self):
         if not self.supabase: return []
         all_data = []
         offset, limit = 0, 1000
         try:
+            today_mx = datetime.now(self.TZ_MEX).date()
             while True:
                 res = self.supabase.table("prospectos") \
-                    .select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento", count='exact') \
+                    .select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento") \
                     .order("updated_at", desc=True) \
                     .range(offset, offset + limit - 1).execute()
                 batch = res.data
                 if not batch: break
-                for item in batch: all_data.append(self._reconstruir_objeto_prospecto(item))
+                for item in batch: all_data.append(self._reconstruir_objeto_prospecto(item, today_mx))
                 if len(batch) < limit: break
                 offset += limit
             return all_data
@@ -407,12 +422,12 @@ class DataHandler:
 
     def get_client_full_profile(self, p_id):
         try:
-            res = self.supabase.table("prospectos").select("*, seguimientos!seguimientos_prospecto_id_fkey(*)").eq("id", p_id).execute()
+            res = self.supabase.table("prospectos").select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento, resumen, comentarios, imagenes_url, seguimientos!seguimientos_prospecto_id_fkey(numero_paso, fecha_seguimiento, nota_seguimiento)").eq("id", p_id).execute()
             if not res.data: return None
             return self._reconstruir_objeto_prospecto(res.data[0])
         except: return None
 
-    def _reconstruir_objeto_prospecto(self, p):
+    def _reconstruir_objeto_prospecto(self, p, today_mx=None):
         p['id_db'] = p.get('id')
         p['nombre'] = p.get('nombre') or "Sin Nombre"
         p['fecha_registro'] = self._formatear_fecha_ui(p.get('fecha_registro'))
@@ -426,7 +441,7 @@ class DataHandler:
             if fp_db:
                 try:
                     fp = datetime.strptime(str(fp_db), "%Y-%m-%d").date()
-                    now_mx = datetime.now(pytz.timezone('America/Mexico_City')).date()
+                    now_mx = today_mx or datetime.now(self.TZ_MEX).date()
                     diff = (now_mx - fp).days
                     if diff <= 0: rend = "AL DIA"
                     elif diff == 1: rend = "ALERTA"
@@ -501,27 +516,52 @@ class DataHandler:
         except: return {"status": "error"}
 
     def get_clients_for_agent(self, agent_name):
+        if not self.supabase or not agent_name: return []
+        all_data = []
+        offset, limit = 0, 1000
         try:
-            res = self.supabase.table("prospectos").select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento").ilike("asesora", f"%{agent_name}%").order("updated_at", desc=True).execute()
-            return [self._reconstruir_objeto_prospecto(item) for item in res.data]
+            today_mx = datetime.now(self.TZ_MEX).date()
+            while True:
+                res = self.supabase.table("prospectos") \
+                    .select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento") \
+                    .ilike("asesora", f"%{agent_name}%") \
+                    .order("updated_at", desc=True) \
+                    .range(offset, offset + limit - 1).execute()
+                batch = res.data
+                if not batch: break
+                for item in batch:
+                    all_data.append(self._reconstruir_objeto_prospecto(item, today_mx))
+                if len(batch) < limit: break
+                offset += limit
+            return all_data
         except: return []
 
     # --- INICIO MÓDULO POOL ---
-    def get_pool_clients(self):
+    def get_pool_clients(self, asesora_nombre=None):
         try:
             # 1. Establecer hora actual en base a timezone local
-            tz_mex = pytz.timezone('America/Mexico_City')
+            tz_mex = self.TZ_MEX
             now_mx = datetime.now(tz_mex)
             pool = []
             
-            # --- CONSULTA 1: Obtener todos los registros BLOQUEADOS ---
-            # Esto es vital para que las asesoras vean sus prospectos reclamados en "Mis Reclamados"
-            blocked_res = self.supabase.table("AGENDA_OBSOLETA") \
-                .select("folio_i, telefono, status, hora, fecha, updated, updated_at") \
-                .like("status", "BLOQUEADO_%") \
-                .execute()
+            # --- CONSULTA 1: Obtener registros BLOQUEADOS (solo de la asesora si se especifica) ---
+            blocked_data = []
+            offset, limit = 0, 1000
+            while True:
+                query = self.supabase.table("AGENDA_OBSOLETA") \
+                    .select("folio_i, telefono, status, hora, fecha, updated_at")
+                if asesora_nombre:
+                    query = query.eq("status", f"BLOQUEADO_{asesora_nombre}")
+                else:
+                    query = query.like("status", "BLOQUEADO_%")
+                res = query.range(offset, offset + limit - 1).execute()
+                batch = res.data or []
+                blocked_data.extend(batch)
+                if len(batch) < limit:
+                    break
+                offset += limit
                 
-            for item in blocked_res.data:
+            for item in blocked_data:
                 up = item.get('updated_at')
                 if up:
                     try:
@@ -540,31 +580,27 @@ class DataHandler:
                     "status": item.get('status'),
                     "hora": item.get('hora'),
                     "fecha": item.get('fecha'),
-                    "updated": item.get('updated'),
                     "updated_at": item.get('updated_at')
                 })
             
             # --- CONSULTA 2: Obtener registros públicos (ISABELA) con antigüedad >= 3 días ---
-            # Para optimizar y evitar loops costosos, filtramos la fecha y status directamente en Supabase
             three_days_ago = (now_mx - timedelta(days=3)).strftime("%Y-%m-%d")
             public_res = self.supabase.table("AGENDA_OBSOLETA") \
-                .select("folio_i, telefono, status, hora, fecha, updated, updated_at") \
+                .select("folio_i, telefono, status, hora, fecha") \
                 .eq("status", "ISABELA") \
                 .lte("fecha", three_days_ago) \
                 .order("updated_at", desc=True) \
                 .limit(100) \
                 .execute()
                 
-            for item in public_res.data:
+            for item in (public_res.data or []):
                 if item.get('status') == 'ISABELA':
                     pool.append({
                         "folio_i": item.get('folio_i'),
                         "telefono": item.get('telefono'),
                         "status": item.get('status'),
                         "hora": item.get('hora'),
-                        "fecha": item.get('fecha'),
-                        "updated": item.get('updated'),
-                        "updated_at": item.get('updated_at')
+                        "fecha": item.get('fecha')
                     })
                         
             return pool
@@ -667,16 +703,25 @@ class DataHandler:
             now_mx = datetime.now(tz_mex)
             today_mx = now_mx.date()
 
-            blocked_res = self.supabase.table("AGENDA_OBSOLETA") \
-                .select("status, updated_at") \
-                .like("status", "BLOQUEADO_%") \
-                .execute()
+            blocked_rows = []
+            offset, limit = 0, 1000
+            while True:
+                res = self.supabase.table("AGENDA_OBSOLETA") \
+                    .select("status, updated_at") \
+                    .like("status", "BLOQUEADO_%") \
+                    .range(offset, offset + limit - 1) \
+                    .execute()
+                batch = res.data or []
+                blocked_rows.extend(batch)
+                if len(batch) < limit:
+                    break
+                offset += limit
 
             counts = {}
             for a in asesoras:
                 counts[self._normalize(a)] = {"asesora": a, "tiene": 0, "hoy": 0}
 
-            for item in (blocked_res.data or []):
+            for item in blocked_rows:
                 st = str(item.get('status') or '')
                 if not st.startswith("BLOQUEADO_"):
                     continue

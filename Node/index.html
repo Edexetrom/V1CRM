@@ -203,7 +203,7 @@
                                 <option value="">Seleccionar Asesora...</option>
                                 {agents.map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
-                            <input type="password" placeholder="Clave de Acceso" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} />
+                            <input type="password" placeholder="Clave de Acceso" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-sm border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && sel && pass && !loading) onLogin(sel, pass); }} />
                             <button onClick={() => onLogin(sel, pass)} disabled={loading || !sel || !pass} className="w-full py-6 rounded-3xl text-white font-black text-base shadow-2xl transition-all hover:brightness-110 uppercase tracking-widest border-none outline-none cursor-pointer" style={{ backgroundColor: theme.primary }}>{loading ? 'CARGANDO...' : 'ENTRAR'}</button>
                         </div>
                     </div>
@@ -257,7 +257,10 @@
             const fetchPool = async () => {
                 setPoolLoading(true);
                 try {
-                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool');
+                    const url = user
+                        ? `https://crmasesorasapi.libresdeumas.com/api/pool?asesora=${encodeURIComponent(user)}`
+                        : 'https://crmasesorasapi.libresdeumas.com/api/pool';
+                    const res = await fetch(url);
                     const data = await res.json();
                     setPoolData(data || []);
                 } catch (e) { console.error(e); }
@@ -337,13 +340,30 @@
 
                 return (
                     <div className="animate-in fade-in">
-                        <div className="mb-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-6 items-center">
-                            <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                                Bloqueados en tu posesión: <span className={misReclamados.length >= 250 ? 'text-red-500' : 'text-emerald-500'}>{misReclamados.length}/250</span>
-                            </p>
-                            <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                                Tomados hoy: <span className={tomadosHoy >= 10 ? 'text-red-500' : 'text-sky-500'}>{tomadosHoy}/10</span>
-                            </p>
+                        <div className="mb-6 bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex flex-wrap gap-6 items-center flex-1">
+                                <div className="min-w-[190px]">
+                                    <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                                        <span>En tu posesión</span>
+                                        <span className={misReclamados.length >= 250 ? 'text-red-500' : 'text-emerald-600'}>{misReclamados.length}/250</span>
+                                    </div>
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all ${misReclamados.length >= 250 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, (misReclamados.length / 250) * 100)}%` }} />
+                                    </div>
+                                </div>
+                                <div className="min-w-[170px]">
+                                    <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                                        <span>Tomados hoy</span>
+                                        <span className={tomadosHoy >= 10 ? 'text-red-500' : 'text-sky-600'}>{tomadosHoy}/10</span>
+                                    </div>
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all ${tomadosHoy >= 10 ? 'bg-red-500' : 'bg-sky-500'}`} style={{ width: `${Math.min(100, (tomadosHoy / 10) * 100)}%` }} />
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={fetchPool} disabled={poolLoading} className="px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl font-black uppercase text-[10px] tracking-widest border border-slate-200 cursor-pointer flex items-center gap-2 transition-colors self-start md:self-auto">
+                                <i className={`fas fa-sync-alt ${poolLoading ? 'animate-spin' : ''}`}></i> Actualizar
+                            </button>
                         </div>
 
                         <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-2 px-4 mt-2">Mis Reclamados</h3>
@@ -550,6 +570,22 @@
                 isSyncing.current = false;
             };
 
+            const quickStats = useMemo(() => {
+                const todayMx = new Date(getMexicoDate() + "T00:00:00").getTime();
+                let hoy = 0, vencido = 0, ventas = 0;
+                clients.forEach(c => {
+                    if (c['Estado Final'] === 'Venta') ventas++;
+                    const proxStr = c['Fecha Próx. Contacto'];
+                    if (proxStr && proxStr !== '--' && c['Estado Final'] !== 'Venta' && c['Estado Final'] !== 'No interesado') {
+                        const [d, m, y] = proxStr.split('/').map(Number);
+                        const tVal = new Date(y, m - 1, d).getTime();
+                        if (tVal === todayMx) hoy++;
+                        else if (tVal < todayMx) vencido++;
+                    }
+                });
+                return { total: clients.length, hoy, vencido, ventas };
+            }, [clients]);
+
             const filteredClients = useMemo(() => {
                 const search = filters.name.toLowerCase();
                 const todayMx = new Date(getMexicoDate() + "T00:00:00");
@@ -653,7 +689,26 @@
                         {activeTab === 'Mis Prospectos' && (
                             <div className="animate-in fade-in">
                                 {/* --- FIN MÓDULO POOL --- */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                                    <button type="button" onClick={() => setFilters({ name: '', status: '', interest: '', dateRange: '' })} className={`p-4 rounded-2xl border text-left transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${!filters.dateRange && !filters.status ? 'border-sky-300 ring-2 ring-sky-100' : 'border-slate-100'}`}>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Prospectos</p>
+                                        <p className="text-2xl font-black text-slate-800 mt-1">{quickStats.total}</p>
+                                    </button>
+                                    <button type="button" onClick={() => setFilters(f => ({ ...f, dateRange: f.dateRange === 'hoy' ? '' : 'hoy', status: '' }))} className={`p-4 rounded-2xl border text-left transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${filters.dateRange === 'hoy' ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-100'}`}>
+                                        <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Para Hoy</p>
+                                        <p className="text-2xl font-black text-amber-600 mt-1">{quickStats.hoy}</p>
+                                    </button>
+                                    <button type="button" onClick={() => setFilters(f => ({ ...f, dateRange: f.dateRange === 'vencido' ? '' : 'vencido', status: '' }))} className={`p-4 rounded-2xl border text-left transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${filters.dateRange === 'vencido' ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-100'}`}>
+                                        <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Vencidos</p>
+                                        <p className="text-2xl font-black text-red-500 mt-1">{quickStats.vencido}</p>
+                                    </button>
+                                    <button type="button" onClick={() => setFilters(f => ({ ...f, status: f.status === 'Venta' ? '' : 'Venta', dateRange: '' }))} className={`p-4 rounded-2xl border text-left transition-all cursor-pointer bg-white shadow-sm hover:shadow-md ${filters.status === 'Venta' ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-slate-100'}`}>
+                                        <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Ventas</p>
+                                        <p className="text-2xl font-black text-emerald-600 mt-1">{quickStats.ventas}</p>
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
                                     <div className="lg:col-span-2 relative">
                                         <i className="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
                                         <input type="text" placeholder="Buscar expediente..." className="w-full pl-12 pr-5 py-4 rounded-2xl border-none shadow-sm font-bold text-xs focus:ring-2 focus:ring-sky-300 outline-none transition-all" value={filters.name} onChange={e => setFilters({ ...filters, name: e.target.value })} />

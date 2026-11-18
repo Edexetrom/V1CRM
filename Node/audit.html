@@ -560,18 +560,18 @@
                         {mainTab === 'dashboard' && (
                             <div className="space-y-6 animate-in fade-in duration-500">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-                                    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
+                                    <button type="button" onClick={() => setFilters(f => ({ ...f, rendimiento: f.rendimiento === 'En tiempo' ? '' : 'En tiempo' }))} className={`bg-white p-5 rounded-[2rem] shadow-sm border flex items-center justify-between text-left cursor-pointer transition-all hover:shadow-md ${filters.rendimiento === 'En tiempo' ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-slate-50'}`}>
                                         <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">En Tiempo</p><h4 className="text-2xl font-black text-emerald-600">{statsRendimiento["En tiempo"]}</h4></div>
                                         <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 text-xl shadow-inner"><i className="fas fa-check-circle"></i></div>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
+                                    </button>
+                                    <button type="button" onClick={() => setFilters(f => ({ ...f, rendimiento: f.rendimiento === 'Retraso' ? '' : 'Retraso' }))} className={`bg-white p-5 rounded-[2rem] shadow-sm border flex items-center justify-between text-left cursor-pointer transition-all hover:shadow-md ${filters.rendimiento === 'Retraso' ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-50'}`}>
                                         <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Retraso</p><h4 className="text-2xl font-black text-amber-500">{statsRendimiento["Retraso"]}</h4></div>
                                         <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 text-xl shadow-inner"><i className="fas fa-clock"></i></div>
-                                    </div>
-                                    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 flex items-center justify-between">
+                                    </button>
+                                    <button type="button" onClick={() => setFilters(f => ({ ...f, rendimiento: f.rendimiento === 'Acción Necesaria' ? '' : 'Acción Necesaria' }))} className={`bg-white p-5 rounded-[2rem] shadow-sm border flex items-center justify-between text-left cursor-pointer transition-all hover:shadow-md ${filters.rendimiento === 'Acción Necesaria' ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-50'}`}>
                                         <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Acción Necesaria</p><h4 className="text-2xl font-black text-red-500">{statsRendimiento["Acción necesaria"]}</h4></div>
                                         <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500 text-xl shadow-inner"><i className="fas fa-exclamation-circle"></i></div>
-                                    </div>
+                                    </button>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1287,7 +1287,7 @@
                                 <option value="">Seleccionar Auditor...</option>
                                 {Array.isArray(auditors) && auditors.map(a => <option key={a} value={a}>{a}</option>)}
                             </select>
-                            <input type="password" placeholder="Clave de Seguridad" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} />
+                            <input type="password" placeholder="Clave de Seguridad" className="w-full p-4 rounded-2xl bg-slate-50 font-bold text-xs border-none outline-none shadow-inner" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && sel && pass && !loading) onLogin(sel, pass); }} />
                             <button onClick={() => onLogin(sel, pass)} disabled={loading || !sel || !pass} className="w-full py-4 mt-2 rounded-2xl text-white font-black text-base shadow-2xl transition-all hover:brightness-110 uppercase tracking-tighter border-none cursor-pointer outline-none" style={{ backgroundColor: theme.primary }}>{loading ? 'AUTENTICANDO...' : 'INICIAR SESIÓN'}</button>
                         </div>
                     </div>
