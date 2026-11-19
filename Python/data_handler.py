@@ -401,6 +401,18 @@ class DataHandler:
 
     TZ_MEX = pytz.timezone('America/Mexico_City')
 
+    def _parse_timestamptz(self, ts_str):
+        """Parsea timestamptz de Supabase/Postgres (incluyendo offsets cortos como +00) de forma segura."""
+        if not ts_str:
+            return None
+        s = str(ts_str).strip().replace('Z', '+00:00')
+        if re.search(r'[+-]\d{2}$', s):
+            s = s + ':00'
+        dt = datetime.fromisoformat(s)
+        if not dt.tzinfo:
+            dt = self.TZ_MEX.localize(dt)
+        return dt
+
     def get_all_clients(self):
         if not self.supabase: return []
         all_data = []
@@ -565,14 +577,12 @@ class DataHandler:
                 up = item.get('updated_at')
                 if up:
                     try:
-                        dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
-                        if not dt.tzinfo:
-                            dt = tz_mex.localize(dt)
-                        diff = (now_mx - dt).days
-                        if diff > 30:
+                        dt = self._parse_timestamptz(up)
+                        if dt and (now_mx - dt).days > 30:
                             # Si el apartado caducó, se modifica el status a vacío
                             item['status'] = ''
-                    except: pass
+                    except Exception:
+                        pass
                 
                 pool.append({
                     "folio_i": item.get('folio_i'),
@@ -583,12 +593,13 @@ class DataHandler:
                     "updated_at": item.get('updated_at')
                 })
             
-            # --- CONSULTA 2: Obtener registros públicos (ISABELA) con antigüedad >= 3 días ---
-            three_days_ago = (now_mx - timedelta(days=3)).strftime("%Y-%m-%d")
+            # --- CONSULTA 2: Obtener registros públicos (ISABELA) con antigüedad >= 4 horas en updated_at ---
+            # Como updated_at es timestamptz (almacenado en UTC en Postgres), enviamos el corte en UTC para comparación exacta
+            four_hours_ago_utc = (now_mx - timedelta(hours=4)).astimezone(pytz.UTC).isoformat()
             public_res = self.supabase.table("AGENDA_OBSOLETA") \
-                .select("folio_i, telefono, status, hora, fecha") \
+                .select("folio_i, telefono, status, hora, fecha, updated_at") \
                 .eq("status", "ISABELA") \
-                .lte("fecha", three_days_ago) \
+                .lte("updated_at", four_hours_ago_utc) \
                 .order("updated_at", desc=True) \
                 .limit(100) \
                 .execute()
@@ -600,7 +611,8 @@ class DataHandler:
                         "telefono": item.get('telefono'),
                         "status": item.get('status'),
                         "hora": item.get('hora'),
-                        "fecha": item.get('fecha')
+                        "fecha": item.get('fecha'),
+                        "updated_at": item.get('updated_at')
                     })
                         
             return pool
@@ -626,12 +638,8 @@ class DataHandler:
                 up_str = row.get('updated_at')
                 if up_str:
                     try:
-                        dt = datetime.fromisoformat(str(up_str).replace('Z', '+00:00'))
-                        if not dt.tzinfo:
-                            dt = tz_mex.localize(dt)
-                        else:
-                            dt = dt.astimezone(tz_mex)
-                        if dt.date() == today_mx:
+                        dt = self._parse_timestamptz(up_str)
+                        if dt and dt.astimezone(tz_mex).date() == today_mx:
                             taken_today += 1
                     except Exception:
                         pass
@@ -646,16 +654,23 @@ class DataHandler:
             up = lead_check.data[0].get('updated_at')
             available = False
             if st == 'ISABELA':
-                available = True
+                if up:
+                    try:
+                        dt = self._parse_timestamptz(up)
+                        if dt and (now_mx - dt) >= timedelta(hours=4):
+                            available = True
+                    except Exception:
+                        pass
+                else:
+                    available = True
             elif st.startswith('BLOQUEADO_'):
                 if up:
                     try:
-                        dt = datetime.fromisoformat(str(up).replace('Z', '+00:00'))
-                        if not dt.tzinfo:
-                            dt = tz_mex.localize(dt)
-                        if (now_mx - dt).days > 30:
+                        dt = self._parse_timestamptz(up)
+                        if dt and (now_mx - dt).days > 30:
                             available = True
-                    except: pass
+                    except Exception:
+                        pass
             
             if not available:
                 return {"status": "error", "message": "El prospecto ya fue tomado", "code": 409}
@@ -734,12 +749,8 @@ class DataHandler:
                 up_str = item.get('updated_at')
                 if up_str:
                     try:
-                        dt = datetime.fromisoformat(str(up_str).replace('Z', '+00:00'))
-                        if not dt.tzinfo:
-                            dt = tz_mex.localize(dt)
-                        else:
-                            dt = dt.astimezone(tz_mex)
-                        if dt.date() == today_mx:
+                        dt = self._parse_timestamptz(up_str)
+                        if dt and dt.astimezone(tz_mex).date() == today_mx:
                             counts[key]["hoy"] += 1
                     except Exception:
                         pass

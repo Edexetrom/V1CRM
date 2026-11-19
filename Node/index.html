@@ -295,7 +295,8 @@
                 const tomadosHoy = misReclamados.filter(p => {
                     if (!p.updated_at) return false;
                     try {
-                        const d = new Date(p.updated_at);
+                        const normTs = String(p.updated_at).trim().replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
+                        const d = new Date(normTs);
                         if (isNaN(d.getTime())) return false;
                         const dMx = new Intl.DateTimeFormat('en-CA', {
                             timeZone: 'America/Mexico_City',
