@@ -1030,6 +1030,7 @@
             });
             const [files, setFiles] = useState([]);
             const [sending, setSending] = useState(false);
+            const isSubmitting = useRef(false);
 
             const duplicate = useMemo(() => {
                 const cleanInput = form.Canal.replace(/\D/g, '').slice(-10);
@@ -1049,6 +1050,7 @@
 
             const save = async (e) => {
                 if (e) e.preventDefault();
+                if (isSubmitting.current || sending) return;
                 const cleanPhone = form.Canal.replace(/\D/g, '').slice(-10);
                 if (cleanPhone.length !== 10) return setStatus({ type: 'error', title: 'Error', message: "El teléfono debe ser de 10 dígitos." });
 
@@ -1057,6 +1059,7 @@
                     if (!window.confirm("¿Estás segura de que tu siguiente cita será para el día de hoy?")) return;
                 }
 
+                isSubmitting.current = true;
                 setSending(true);
 
                 const syncId = generateSyncId();
@@ -1075,11 +1078,6 @@
                     etapa: 'nuevo'
                 };
 
-                const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
-                queue.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/add-client', payload });
-                localStorage.setItem('crm_sync_queue', JSON.stringify(queue));
-                onQueueChange(queue.length);
-
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/add-client', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1087,34 +1085,33 @@
                     });
                     const data = await res.json();
 
-                    // --- AJUSTE SOLICITADO: CAPTURA DE SEÑAL DE TELÉFONO DUPLICADO ---
                     if (res.status === 409) {
                         setStatus({
                             type: 'error',
                             title: 'Número Duplicado',
-                            message: data.message || "Este número de teléfono ya le pertenece a otra persona."
+                            message: data.message || "Este número de teléfono ya está registrado."
                         });
+                        isSubmitting.current = false;
                         setSending(false);
-                        // Quitamos de la cola ya que el servidor rechazó por validación de negocio
-                        const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]').filter(x => x.syncId !== syncId);
-                        localStorage.setItem('crm_sync_queue', JSON.stringify(q));
-                        onQueueChange(q.length);
-                        return; // Detener flujo sin cerrar modal ni limpiar formulario
+                        return;
                     }
 
                     if (data.status === 'success' || data.message?.includes('ya existe')) {
-                        const q = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]').filter(x => x.syncId !== syncId);
-                        localStorage.setItem('crm_sync_queue', JSON.stringify(q));
-                        onQueueChange(q.length);
                         setStatus({ type: 'success', title: 'Éxito', message: "Expediente guardado en Base Local.", data: form });
                         onRefresh(); onClose();
                     } else {
                         setStatus({ type: 'error', title: 'Error', message: data.message || "No se pudo registrar." });
                     }
                 } catch (err) {
+                    // Solo encolamos en modo offline real si falló la conexión con el servidor
+                    const queue = JSON.parse(localStorage.getItem('crm_sync_queue') || '[]');
+                    queue.push({ syncId, endpoint: 'https://crmasesorasapi.libresdeumas.com/api/add-client', payload });
+                    localStorage.setItem('crm_sync_queue', JSON.stringify(queue));
+                    onQueueChange(queue.length);
                     setStatus({ type: 'error', title: 'Modo Offline', message: "Guardado en cola de sincronización.", data: form });
                     onClose();
                 }
+                isSubmitting.current = false;
                 setSending(false);
             };
 

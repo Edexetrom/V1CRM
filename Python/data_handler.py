@@ -378,13 +378,18 @@ class DataHandler:
         try:
             # 1. VERIFICACIÓN PREVENTIVA (PRIMERA LÍNEA)
             # Buscamos el canal en Supabase antes de cualquier otra acción
-            check = self.supabase.table("prospectos").select("id").eq("canal", canal_num).execute()
+            check = self.supabase.table("prospectos").select("id, asesora").eq("canal", canal_num).execute()
             if check.data and len(check.data) > 0:
-                logger.warning(f"REGISTRO DESCARTADO: El número {canal_num} ya existe en la base de datos.")
-                # Retornamos un status específico 'duplicate' para que el servidor lo identifique
+                existing_asesora = check.data[0].get('asesora') or ''
+                is_same_agent = self._normalize(existing_asesora) == self._normalize(datos.get('Asesora') or '')
+                logger.warning(f"REGISTRO DESCARTADO: El número {canal_num} ya existe (asesora: {existing_asesora}).")
                 return {
-                    "status": "duplicate", 
-                    "message": "El número que se intenta registrar ya pertenece a otra persona."
+                    "status": "duplicate",
+                    "message": (
+                        "Este número ya está registrado en tu propia lista de prospectos."
+                        if is_same_agent
+                        else "El número que se intenta registrar ya pertenece a otra persona."
+                    )
                 }
 
             # 2. PROCESAMIENTO (Solo si no es duplicado)
