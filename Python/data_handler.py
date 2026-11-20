@@ -524,7 +524,34 @@ class DataHandler:
                 ))
 
             events.sort(key=lambda pair: pair[0])
-            return [ev for _, ev in events[:20]]
+            candidate_events = [ev for _, ev in events[:30]]
+
+            # Excluir citas cuyo teléfono ya está registrado en prospectos
+            phone_nums = []
+            for ev in candidate_events:
+                c_num = self._limpiar_canal(ev.get("telefono"))
+                if c_num:
+                    phone_nums.append(c_num)
+
+            registered_phones = set()
+            if phone_nums:
+                try:
+                    reg_res = self.supabase.table("prospectos") \
+                        .select("canal") \
+                        .in_("canal", list(set(phone_nums))) \
+                        .execute()
+                    for row in (reg_res.data or []):
+                        c_val = self._limpiar_canal(row.get("canal"))
+                        if c_val:
+                            registered_phones.add(c_val)
+                except Exception as reg_err:
+                    logger.warning(f"AGENDA CHECK REGISTERED WARN: {reg_err}")
+
+            final_events = [
+                ev for ev in candidate_events
+                if self._limpiar_canal(ev.get("telefono")) not in registered_phones
+            ]
+            return final_events[:20]
         except Exception as e:
             logger.error(f"AGENDA IDREPORTE ERROR: {e}")
             return []

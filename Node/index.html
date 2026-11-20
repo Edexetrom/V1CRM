@@ -1033,7 +1033,13 @@
                         user={user}
                         prefill={prefillClient}
                         onClose={() => { setModal(null); setPrefillClient(null); }}
-                        onRefresh={() => fetchClients(user)}
+                        onRefresh={(registeredPhone) => {
+                            fetchClients(user);
+                            if (registeredPhone) {
+                                const cleanReg = String(registeredPhone).replace(/\D/g, '').slice(-10);
+                                setCalendarEvents(prev => prev.filter(ev => String(ev.telefono || '').replace(/\D/g, '').slice(-10) !== cleanReg));
+                            }
+                        }}
                         setStatus={setStatusAlert}
                         onQueueChange={setPendingCount}
                         existingClients={clients}
@@ -1221,7 +1227,7 @@
 
                     if (data.status === 'success' || data.message?.includes('ya existe')) {
                         setStatus({ type: 'success', title: 'Éxito', message: "Expediente guardado en Base Local.", data: form });
-                        onRefresh(); onClose();
+                        onRefresh(cleanPhone); onClose();
                     } else {
                         setStatus({ type: 'error', title: 'Error', message: data.message || "No se pudo registrar." });
                     }
