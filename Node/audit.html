@@ -197,6 +197,12 @@
             n['Comentarios'] = raw.comentarios || raw['Comentarios'] || "";
             n['Imagenes'] = raw.imagenes_url || raw['Imagenes'] || "";
             n['rendimiento'] = raw.rendimiento || "Sin Cita";
+            n['folio_r'] = raw.folio_r || "";
+            n['folios_r_list'] = Array.isArray(raw.folios_r_list)
+                ? raw.folios_r_list
+                : (raw.folios_r_historial
+                    ? String(raw.folios_r_historial).split(',').map(s => s.trim()).filter(Boolean)
+                    : (raw.folio_r ? [raw.folio_r] : []));
 
             for (let i = 1; i <= 30; i++) {
                 n[`Fecha Seguimiento ${i}`] = raw[`fecha_seguimiento_${i}`] || raw[`Fecha Seguimiento ${i}`] || null;
@@ -1182,6 +1188,29 @@
                                         <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Registro Inicial</p><div className="read-only-box">{client['Fecha 1er Contacto']}</div></div>
                                         <div className="space-y-1.5"><p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Próxima Cita</p><div className="read-only-box text-sky-600 font-black">{client['Fecha Próx. Contacto'] || '--'}</div></div>
                                     </div>
+                                    {client.folios_r_list && client.folios_r_list.length > 0 && (
+                                        <div className="p-5 bg-indigo-50/60 border border-indigo-100 rounded-[2rem] space-y-2.5">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-[9px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                                                    <i className="fas fa-lock text-[9px]"></i> Folios R Registrados (ID Reporte)
+                                                </p>
+                                                <span className="text-[9px] font-bold text-indigo-400 uppercase">{client.folios_r_list.length} folio(s)</span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {client.folios_r_list.map((fr, idx) => (
+                                                    <span
+                                                        key={fr}
+                                                        className={idx === 0
+                                                            ? 'px-3.5 py-1.5 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest shadow-sm inline-flex items-center gap-1.5'
+                                                            : 'px-3 py-1 rounded-xl bg-white text-slate-500 border border-slate-200 text-[10px] font-bold uppercase tracking-widest'}
+                                                    >
+                                                        {fr}
+                                                        {idx === 0 && <span className="px-1.5 py-0.5 rounded bg-white/20 text-[8px]">Actual</span>}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-2">
                                             <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest ml-1">Resumen de Apertura</p>

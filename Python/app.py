@@ -136,6 +136,11 @@ def get_client_details():
     data = handler.get_client_full_profile(p_id)
     return jsonify(data)
 
+@app.route('/api/lookup-folio-r', methods=['GET'])
+def lookup_folio_r():
+    telefono = request.args.get('telefono', '')
+    return jsonify(handler.lookup_folio_r_by_phone(telefono))
+
 
 @app.route('/api/delete-client', methods=['POST', 'OPTIONS'])
 def delete_client():

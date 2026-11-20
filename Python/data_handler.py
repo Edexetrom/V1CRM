@@ -352,6 +352,65 @@ class DataHandler:
         str_num = "".join(filter(str.isdigit, str(telefono)))
         return int(str_num[-10:]) if len(str_num) >= 10 else None
 
+    def _folio_r_rank(self, folio_str):
+        """Extrae el valor numérico de un Folio R (ej. 'R-048561' -> 48561) para ordenar del más actual al más antiguo."""
+        if not folio_str:
+            return -1
+        digits = "".join(filter(str.isdigit, str(folio_str)))
+        return int(digits) if digits else -1
+
+    def lookup_folio_r_by_phone(self, telefono):
+        """Consulta en modo SOLO LECTURA la tabla IDREPORTE_AGENDA_OBSOLETA por teléfono."""
+        if not self.supabase:
+            return {"found": False, "folio_r": "", "folios_r": [], "nombre": ""}
+        canal_num = self._limpiar_canal(telefono)
+        if not canal_num:
+            return {"found": False, "folio_r": "", "folios_r": [], "nombre": ""}
+
+        rows = []
+        try:
+            res = self.supabase.table("IDREPORTE_AGENDA_OBSOLETA") \
+                .select("folio_r, nombre, telefono") \
+                .ilike("telefono", f"%{canal_num}") \
+                .execute()
+            rows = res.data or []
+        except Exception:
+            try:
+                res = self.supabase.table("IDREPORTE_AGENDA_OBSOLETA") \
+                    .select("folio_r, nombre, telefono") \
+                    .eq("telefono", canal_num) \
+                    .execute()
+                rows = res.data or []
+            except Exception as e:
+                logger.error(f"LOOKUP IDREPORTE ERROR: {e}")
+                return {"found": False, "folio_r": "", "folios_r": [], "nombre": ""}
+
+        if not rows:
+            return {"found": False, "folio_r": "", "folios_r": [], "nombre": ""}
+
+        # Ordenar por número de folio_r descendente (más alto = más actual)
+        rows_sorted = sorted(rows, key=lambda r: self._folio_r_rank(r.get("folio_r")), reverse=True)
+
+        seen = set()
+        folios_r = []
+        best_nombre = ""
+        for r in rows_sorted:
+            f_val = str(r.get("folio_r") or "").strip()
+            if f_val and f_val not in seen:
+                seen.add(f_val)
+                folios_r.append(f_val)
+            if not best_nombre:
+                n_val = str(r.get("nombre") or "").strip()
+                if n_val:
+                    best_nombre = n_val
+
+        return {
+            "found": bool(folios_r or best_nombre),
+            "folio_r": folios_r[0] if folios_r else "",
+            "folios_r": folios_r,
+            "nombre": best_nombre
+        }
+
     def _formatear_fecha_sql(self, fecha_str):
         if not fecha_str or fecha_str in ['--', '', None]: return None
         try:
@@ -411,6 +470,10 @@ class DataHandler:
                     else: rendimiento = "VENCIDO"
                 except: pass
             
+            lookup_r = self.lookup_folio_r_by_phone(canal_num)
+            folio_r_actual = lookup_r.get("folio_r") or None
+            folios_r_hist = ", ".join(lookup_r.get("folios_r") or []) or None
+
             payload = {
                 "canal": canal_num, 
                 "nombre": datos.get('Nombre'),
@@ -424,10 +487,23 @@ class DataHandler:
                 "updated_at": datetime.now(tz_mex).isoformat(),
                 "rendimiento": rendimiento
             }
+            if folio_r_actual:
+                payload["folio_r"] = folio_r_actual
+            if folios_r_hist:
+                payload["folios_r_historial"] = folios_r_hist
             
-            self.supabase.table("prospectos").insert(payload).execute()
+            try:
+                self.supabase.table("prospectos").insert(payload).execute()
+            except Exception as ins_err:
+                # Si las columnas folio_r / folios_r_historial aún no existen en Supabase, reintentar sin ellas
+                if "folio_r" in str(ins_err):
+                    payload.pop("folio_r", None)
+                    payload.pop("folios_r_historial", None)
+                    self.supabase.table("prospectos").insert(payload).execute()
+                else:
+                    raise ins_err
             logger.info(f"REGISTRO EXITOSO: {datos.get('Nombre')} ({canal_num})")
-            return {"status": "success", "message": "Prospecto registrado correctamente."}
+            return {"status": "success", "message": "Prospecto registrado correctamente.", "folio_r": folio_r_actual or ""}
             
         except Exception as e:
             err_str = str(e)
@@ -564,9 +640,21 @@ class DataHandler:
 
     def get_client_full_profile(self, p_id):
         try:
-            res = self.supabase.table("prospectos").select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento, resumen, comentarios, imagenes_url, seguimientos!seguimientos_prospecto_id_fkey(numero_paso, fecha_seguimiento, nota_seguimiento)").eq("id", p_id).execute()
+            res = self.supabase.table("prospectos").select("*, seguimientos!seguimientos_prospecto_id_fkey(numero_paso, fecha_seguimiento, nota_seguimiento)").eq("id", p_id).execute()
             if not res.data: return None
-            return self._reconstruir_objeto_prospecto(res.data[0])
+            profile = self._reconstruir_objeto_prospecto(res.data[0])
+            # Enriquecer en modo solo lectura con todos los Folios R de IDREPORTE_AGENDA_OBSOLETA
+            lookup_r = self.lookup_folio_r_by_phone(profile.get('canal'))
+            if lookup_r.get('folios_r'):
+                profile['folio_r'] = lookup_r['folio_r']
+                profile['folios_r_list'] = lookup_r['folios_r']
+            else:
+                hist_str = profile.get('folios_r_historial') or ''
+                hist_list = [s.strip() for s in str(hist_str).split(',') if s.strip()]
+                if not hist_list and profile.get('folio_r'):
+                    hist_list = [profile.get('folio_r')]
+                profile['folios_r_list'] = hist_list
+            return profile
         except: return None
 
     def _reconstruir_objeto_prospecto(self, p, today_mx=None):
