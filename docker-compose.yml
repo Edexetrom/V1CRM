@@ -18,6 +18,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
+      - crm_pool_data:/app/data
 
   # Servidor Web (Node.js) - Punto de entrada
   frontend:
@@ -38,6 +39,9 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
+
+volumes:
+  crm_pool_data:
 
 networks:
   default:

@@ -243,6 +243,15 @@ def resolve_pool():
     if res.get('status') == 'error':
         return jsonify(res), code
     return jsonify(res), 200
+
+@app.route('/api/pool/contacted', methods=['POST', 'OPTIONS'])
+def mark_pool_contacted():
+    if request.method == 'OPTIONS': return jsonify({"status": "ok"}), 200
+    data = request.json or {}
+    res = handler.toggle_pool_contacted(data.get('lead_id'), data.get('nombre_asesora'), data.get('contacted'))
+    code = res.pop('code', 200) if 'code' in res else 200
+    return jsonify(res), code
+
 @app.route('/api/audit/pool-summary', methods=['GET'])
 def get_audit_pool_summary():
     return jsonify(handler.get_pool_audit_summary())

@@ -287,24 +287,88 @@
 
             const PoolView = () => {
                 const [selectedIds, setSelectedIds] = useState([]);
+                const [reclamadosFilter, setReclamadosFilter] = useState('todos');
 
-                const misReclamados = poolData.filter(p => p.status === `BLOQUEADO_${user}`);
-                const poolLibre = poolData.filter(p => p.status === 'ISABELA');
+                const parseTs = (ts) => {
+                    if (!ts) return null;
+                    try {
+                        const normTs = String(ts).trim().replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
+                        const d = new Date(normTs);
+                        return isNaN(d.getTime()) ? null : d;
+                    } catch { return null; }
+                };
+
+                const toMxDateStr = (d) => {
+                    if (!d) return '';
+                    return new Intl.DateTimeFormat('en-CA', {
+                        timeZone: 'America/Mexico_City',
+                        year: 'numeric', month: '2-digit', day: '2-digit'
+                    }).format(d);
+                };
+
+                const toMxTimeStr = (d) => {
+                    if (!d) return '';
+                    return new Intl.DateTimeFormat('es-MX', {
+                        timeZone: 'America/Mexico_City',
+                        hour: '2-digit', minute: '2-digit', hour12: true
+                    }).format(d);
+                };
 
                 const todayMx = getMexicoDate();
-                const tomadosHoy = misReclamados.filter(p => {
-                    if (!p.updated_at) return false;
+                const todayMidnight = new Date(todayMx + 'T00:00:00');
+
+                const getDayMeta = (p) => {
+                    const d = parseTs(p.locked_at || p.updated_at);
+                    if (!d) return { daysAgo: 999, label: 'Sin fecha', time: '', bucket: 'anteriores', badgeClass: 'bg-slate-100 text-slate-500 border-slate-200', tsMs: 0 };
+                    const dStr = toMxDateStr(d);
+                    const dMidnight = new Date(dStr + 'T00:00:00');
+                    const daysAgo = Math.max(0, Math.round((todayMidnight - dMidnight) / (1000 * 60 * 60 * 24)));
+                    const time = toMxTimeStr(d);
+                    if (daysAgo === 0) return { daysAgo, label: 'Hoy', time, bucket: 'hoy', badgeClass: 'bg-sky-50 text-sky-600 border-sky-200', tsMs: d.getTime() };
+                    if (daysAgo === 1) return { daysAgo, label: 'Ayer', time, bucket: 'ayer', badgeClass: 'bg-amber-50 text-amber-600 border-amber-200', tsMs: d.getTime() };
+                    if (daysAgo === 2) return { daysAgo, label: 'Antier', time, bucket: 'antier', badgeClass: 'bg-orange-50 text-orange-600 border-orange-200', tsMs: d.getTime() };
+                    return { daysAgo, label: `Hace ${daysAgo} días`, time, bucket: 'anteriores', badgeClass: 'bg-slate-100 text-slate-500 border-slate-200', tsMs: d.getTime() };
+                };
+
+                const misReclamados = poolData
+                    .filter(p => p.status === `BLOQUEADO_${user}`)
+                    .map(p => ({ ...p, _dayMeta: getDayMeta(p) }))
+                    .sort((a, b) => b._dayMeta.tsMs - a._dayMeta.tsMs);
+
+                const poolLibre = poolData.filter(p => p.status === 'ISABELA');
+
+                const tomadosHoy = misReclamados.filter(p => p._dayMeta.daysAgo === 0).length;
+                const countAyer = misReclamados.filter(p => p._dayMeta.daysAgo === 1).length;
+                const countAntier = misReclamados.filter(p => p._dayMeta.daysAgo === 2).length;
+                const countAnteriores = misReclamados.filter(p => p._dayMeta.daysAgo >= 3).length;
+                const countSinMensaje = misReclamados.filter(p => !p.contacted).length;
+
+                const misReclamadosFiltered = misReclamados.filter(p => {
+                    if (reclamadosFilter === 'hoy') return p._dayMeta.bucket === 'hoy';
+                    if (reclamadosFilter === 'ayer') return p._dayMeta.bucket === 'ayer';
+                    if (reclamadosFilter === 'antier') return p._dayMeta.bucket === 'antier';
+                    if (reclamadosFilter === 'anteriores') return p._dayMeta.bucket === 'anteriores';
+                    if (reclamadosFilter === 'pendientes') return !p.contacted;
+                    return true;
+                });
+
+                const handleToggleContacted = async (p) => {
+                    const nextVal = !p.contacted;
+                    setPoolData(prev => prev.map(item => item.folio_i === p.folio_i ? { ...item, contacted: nextVal } : item));
                     try {
-                        const normTs = String(p.updated_at).trim().replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
-                        const d = new Date(normTs);
-                        if (isNaN(d.getTime())) return false;
-                        const dMx = new Intl.DateTimeFormat('en-CA', {
-                            timeZone: 'America/Mexico_City',
-                            year: 'numeric', month: '2-digit', day: '2-digit'
-                        }).format(d);
-                        return dMx === todayMx;
-                    } catch { return false; }
-                }).length;
+                        const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/contacted', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lead_id: p.folio_i, nombre_asesora: user, contacted: nextVal })
+                        });
+                        if (!res.ok) {
+                            setPoolData(prev => prev.map(item => item.folio_i === p.folio_i ? { ...item, contacted: !nextVal } : item));
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        setPoolData(prev => prev.map(item => item.folio_i === p.folio_i ? { ...item, contacted: !nextVal } : item));
+                    }
+                };
 
                 const allowedTotal = Math.max(0, 250 - misReclamados.length);
                 const allowedDaily = Math.max(0, 10 - tomadosHoy);
@@ -367,29 +431,65 @@
                             </button>
                         </div>
 
-                        <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-2 px-4 mt-2">Mis Reclamados</h3>
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3 px-4 mt-2">
+                            <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Mis Reclamados ({misReclamadosFiltered.length})</h3>
+                            <div className="flex flex-wrap gap-1.5">
+                                {[
+                                    { key: 'todos', label: 'Todos', count: misReclamados.length },
+                                    { key: 'hoy', label: 'Hoy', count: tomadosHoy },
+                                    { key: 'ayer', label: 'Ayer', count: countAyer },
+                                    { key: 'antier', label: 'Antier', count: countAntier },
+                                    { key: 'anteriores', label: 'Anteriores', count: countAnteriores },
+                                    { key: 'pendientes', label: 'Sin mensaje', count: countSinMensaje }
+                                ].map(f => (
+                                    <button
+                                        key={f.key}
+                                        type="button"
+                                        onClick={() => setReclamadosFilter(f.key)}
+                                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border cursor-pointer transition-all ${reclamadosFilter === f.key ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        {f.label} <span className="opacity-70 ml-0.5">({f.count})</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <div className="glass rounded-[3rem] shadow-sm mb-8 overflow-hidden border border-white">
                             <div className="overflow-x-auto custom-scroll">
                                 <table className="w-full text-left table-auto">
                                     <thead className="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-black tracking-widest">
                                         <tr>
-                                            <th className="px-8 py-5"># Folio</th>
-                                            <th className="px-8 py-5">Teléfono o Canal</th>
-                                            <th className="px-8 py-5">Hora y Fecha Original</th>
-                                            <th className="px-8 py-5">Estado</th>
-                                            <th className="px-8 py-5 text-right pr-12">Acción</th>
+                                            <th className="px-6 py-5">Apartado</th>
+                                            <th className="px-6 py-5"># Folio</th>
+                                            <th className="px-6 py-5">Teléfono o Canal</th>
+                                            <th className="px-6 py-5">Fecha Original</th>
+                                            <th className="px-6 py-5 text-center">Mensaje</th>
+                                            <th className="px-6 py-5 text-right pr-10">Acción</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {poolLoading ? <tr><td colSpan="5" className="text-center py-6 font-bold opacity-50 uppercase tracking-widest text-xs">Cargando...</td></tr> :
-                                            misReclamados.length === 0 ? <tr><td colSpan="5" className="py-10 text-center opacity-30 font-black uppercase text-xs tracking-[0.4em]">Sin Reclamados</td></tr> :
-                                                misReclamados.map(p => (
-                                                    <tr key={p.folio_i} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{p.folio_i}</td>
-                                                        <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{p.telefono || p.canal || '--'}</td>
-                                                        <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{p.hora} - {p.fecha}</td>
-                                                        <td className="px-8 py-5"><span className="text-[10px] uppercase font-black tracking-widest bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg border border-emerald-200">{p.status}</span></td>
-                                                        <td className="px-8 py-5 text-right pr-12">
+                                        {poolLoading ? <tr><td colSpan="6" className="text-center py-6 font-bold opacity-50 uppercase tracking-widest text-xs">Cargando...</td></tr> :
+                                            misReclamadosFiltered.length === 0 ? <tr><td colSpan="6" className="py-10 text-center opacity-30 font-black uppercase text-xs tracking-[0.4em]">Sin Reclamados</td></tr> :
+                                                misReclamadosFiltered.map(p => (
+                                                    <tr key={p.folio_i} className={`transition-colors ${p.contacted ? 'bg-emerald-50/30 hover:bg-emerald-50/50' : 'hover:bg-slate-50/50'}`}>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`inline-block text-[9px] uppercase font-black tracking-widest px-2.5 py-1 rounded-lg border ${p._dayMeta.badgeClass}`}>{p._dayMeta.label}</span>
+                                                            {p._dayMeta.time && <p className="text-[9px] font-bold text-slate-400 mt-1 ml-0.5">{p._dayMeta.time}</p>}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-[11px] font-bold text-slate-500">{p.folio_i}</td>
+                                                        <td className="px-6 py-4 text-[11px] font-black text-slate-700">{p.telefono || p.canal || '--'}</td>
+                                                        <td className="px-6 py-4 text-[11px] font-bold text-slate-400">{p.hora} - {p.fecha}</td>
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleToggleContacted(p)}
+                                                                title={p.contacted ? 'Marcar como pendiente' : 'Marcar mensaje enviado'}
+                                                                className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border cursor-pointer transition-all inline-flex items-center gap-1.5 ${p.contacted ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm hover:bg-emerald-600' : 'bg-white text-slate-400 border-slate-200 hover:text-emerald-600 hover:border-emerald-300'}`}
+                                                            >
+                                                                <i className={`fas ${p.contacted ? 'fa-check-double' : 'fa-paper-plane'}`}></i>
+                                                                {p.contacted ? 'Enviado' : 'Pendiente'}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right pr-10">
                                                             <button onClick={() => setPoolModalClient(p)} className="px-5 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl uppercase text-[9px] font-black border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors">Gestionar</button>
                                                         </td>
                                                     </tr>

@@ -10,6 +10,7 @@ from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv, find_dotenv
 from supabase import create_client, Client
 import re
+import sqlite3
 import time
 import pytz
 # Carga de variables de entorno desde el directorio del proyecto o padres
@@ -165,6 +166,129 @@ class GoogleSheetsSync:
         logger.info(f"GOOGLE SHEETS: sincronizando prospecto {data.get('Nombre')}")
         return {"status": "success"}
 
+class PoolLocalStore:
+    """Almacén SQLite local en el servidor para congelar locked_at y estado de mensaje enviado."""
+    def __init__(self, db_path=None):
+        default_path = os.getenv("POOL_SQLITE_PATH", "/app/data/pool_state.db")
+        self.db_path = db_path or default_path
+        try:
+            parent = os.path.dirname(self.db_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            self._init_db()
+        except Exception:
+            self.db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pool_state.db")
+            self._init_db()
+
+    def _connect(self):
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        return conn
+
+    def _init_db(self):
+        with self._connect() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pool_locks (
+                    folio_i TEXT PRIMARY KEY,
+                    asesora TEXT NOT NULL,
+                    locked_at TEXT NOT NULL,
+                    contacted INTEGER NOT NULL DEFAULT 0,
+                    contacted_at TEXT
+                )
+            """)
+            conn.commit()
+
+    def record_lock(self, folio_i, asesora, locked_at_iso):
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO pool_locks (folio_i, asesora, locked_at, contacted, contacted_at)
+                    VALUES (?, ?, ?, 0, NULL)
+                    ON CONFLICT(folio_i) DO UPDATE SET
+                        asesora = excluded.asesora,
+                        locked_at = excluded.locked_at,
+                        contacted = 0,
+                        contacted_at = NULL
+                    """,
+                    (str(folio_i), str(asesora), str(locked_at_iso))
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"SQLITE record_lock error: {e}")
+
+    def ensure_lock(self, folio_i, asesora, fallback_iso):
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO pool_locks (folio_i, asesora, locked_at, contacted)
+                    VALUES (?, ?, ?, 0)
+                    """,
+                    (str(folio_i), str(asesora), str(fallback_iso))
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"SQLITE ensure_lock error: {e}")
+
+    def get_locks_map(self, folios):
+        if not folios:
+            return {}
+        try:
+            folio_strs = [str(f) for f in folios if f is not None]
+            if not folio_strs:
+                return {}
+            result = {}
+            with self._connect() as conn:
+                # Consultar en lotes de 500 para no exceder límite de parámetros SQLite
+                for i in range(0, len(folio_strs), 500):
+                    chunk = folio_strs[i:i + 500]
+                    placeholders = ",".join("?" for _ in chunk)
+                    cur = conn.execute(
+                        f"SELECT folio_i, asesora, locked_at, contacted, contacted_at FROM pool_locks WHERE folio_i IN ({placeholders})",
+                        chunk
+                    )
+                    for row in cur.fetchall():
+                        result[row[0]] = {
+                            "asesora": row[1],
+                            "locked_at": row[2],
+                            "contacted": bool(row[3]),
+                            "contacted_at": row[4]
+                        }
+            return result
+        except Exception as e:
+            logger.error(f"SQLITE get_locks_map error: {e}")
+            return {}
+
+    def set_contacted(self, folio_i, asesora, contacted, now_iso):
+        try:
+            val = 1 if contacted else 0
+            ts = str(now_iso) if contacted else None
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "UPDATE pool_locks SET contacted = ?, contacted_at = ? WHERE folio_i = ?",
+                    (val, ts, str(folio_i))
+                )
+                if cur.rowcount == 0:
+                    conn.execute(
+                        "INSERT INTO pool_locks (folio_i, asesora, locked_at, contacted, contacted_at) VALUES (?, ?, ?, ?, ?)",
+                        (str(folio_i), str(asesora or ""), str(now_iso), val, ts)
+                    )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"SQLITE set_contacted error: {e}")
+            return False
+
+    def remove_lock(self, folio_i):
+        try:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM pool_locks WHERE folio_i = ?", (str(folio_i),))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"SQLITE remove_lock error: {e}")
+
+
 class DataHandler:
     """
     Gestor de persistencia v4.0.
@@ -180,7 +304,8 @@ class DataHandler:
         else:
             self.supabase: Client = create_client(url, key)
         self.sheets = GoogleSheetsSync()
-        logger.info("DATA HANDLER v4.0: Servicios de Calendario habilitados.")
+        self.pool_store = PoolLocalStore()
+        logger.info("DATA HANDLER v4.0: Servicios de Calendario y Pool SQLite habilitados.")
 
     def _normalize(self, text):
         """Normaliza texto eliminando acentos y convirtiendo a minúsculas."""
@@ -573,25 +698,50 @@ class DataHandler:
                     break
                 offset += limit
                 
+            locks_map = self.pool_store.get_locks_map([item.get('folio_i') for item in blocked_data])
+            blocked_pool = []
             for item in blocked_data:
-                up = item.get('updated_at')
-                if up:
+                folio_key = str(item.get('folio_i'))
+                st_str = str(item.get('status') or '')
+                lock_owner = st_str[len("BLOQUEADO_"):] if st_str.startswith("BLOQUEADO_") else (asesora_nombre or "")
+                lock_info = locks_map.get(folio_key)
+                if lock_info and lock_info.get('locked_at'):
+                    locked_at = lock_info['locked_at']
+                    contacted = lock_info.get('contacted', False)
+                else:
+                    locked_at = item.get('updated_at') or now_mx.isoformat()
+                    contacted = False
+                    self.pool_store.ensure_lock(folio_key, lock_owner, locked_at)
+
+                dt_sort = None
+                if locked_at:
                     try:
-                        dt = self._parse_timestamptz(up)
+                        dt = self._parse_timestamptz(locked_at)
+                        dt_sort = dt
                         if dt and (now_mx - dt).days > 30:
                             # Si el apartado caducó, se modifica el status a vacío
                             item['status'] = ''
                     except Exception:
                         pass
                 
-                pool.append({
-                    "folio_i": item.get('folio_i'),
-                    "telefono": item.get('telefono'),
-                    "status": item.get('status'),
-                    "hora": item.get('hora'),
-                    "fecha": item.get('fecha'),
-                    "updated_at": item.get('updated_at')
-                })
+                blocked_pool.append((
+                    dt_sort.timestamp() if dt_sort else 0,
+                    {
+                        "folio_i": item.get('folio_i'),
+                        "telefono": item.get('telefono'),
+                        "status": item.get('status'),
+                        "hora": item.get('hora'),
+                        "fecha": item.get('fecha'),
+                        "updated_at": item.get('updated_at'),
+                        "locked_at": locked_at,
+                        "contacted": contacted
+                    }
+                ))
+
+            # Ordenar bloqueados: más nuevos arriba, más viejos abajo
+            blocked_pool.sort(key=lambda pair: pair[0], reverse=True)
+            for _, entry in blocked_pool:
+                pool.append(entry)
             
             # --- CONSULTA 2: Obtener registros públicos (ISABELA) con antigüedad >= 4 horas en updated_at ---
             # Como updated_at es timestamptz (almacenado en UTC en Postgres), enviamos el corte en UTC para comparación exacta
@@ -633,12 +783,14 @@ class DataHandler:
                 return {"status": "error", "message": "Límite de 250 prospectos en posesión alcanzado.", "code": 403}
 
             today_mx = now_mx.date()
+            locks_map = self.pool_store.get_locks_map([row.get('folio_i') for row in blocked_rows])
             taken_today = 0
             for row in blocked_rows:
-                up_str = row.get('updated_at')
-                if up_str:
+                folio_key = str(row.get('folio_i'))
+                ref_ts = (locks_map.get(folio_key) or {}).get('locked_at') or row.get('updated_at')
+                if ref_ts:
                     try:
-                        dt = self._parse_timestamptz(up_str)
+                        dt = self._parse_timestamptz(ref_ts)
                         if dt and dt.astimezone(tz_mex).date() == today_mx:
                             taken_today += 1
                     except Exception:
@@ -680,6 +832,7 @@ class DataHandler:
                 "updated": True,
                 "updated_at": now_mx.isoformat()
             }).eq("folio_i", lead_id).execute()
+            self.pool_store.record_lock(lead_id, asesora_nombre, now_mx.isoformat())
             
             return {"status": "success"}
         except Exception as e:
@@ -705,9 +858,19 @@ class DataHandler:
                 "updated": True,
                 "updated_at": now_mx.isoformat()
             }).eq("folio_i", lead_id).execute()
+            self.pool_store.remove_lock(lead_id)
             return {"status": "success"}
         except Exception as e:
             return {"status": "error", "message": str(e), "code": 500}
+
+    def toggle_pool_contacted(self, lead_id, asesora_nombre, contacted):
+        if not lead_id:
+            return {"status": "error", "message": "lead_id requerido", "code": 400}
+        now_mx = datetime.now(self.TZ_MEX)
+        ok = self.pool_store.set_contacted(lead_id, asesora_nombre, bool(contacted), now_mx.isoformat())
+        if not ok:
+            return {"status": "error", "message": "No se pudo guardar la marca.", "code": 500}
+        return {"status": "success", "contacted": bool(contacted)}
     # --- FIN MÓDULO POOL ---
 
     def get_pool_audit_summary(self):
@@ -722,7 +885,7 @@ class DataHandler:
             offset, limit = 0, 1000
             while True:
                 res = self.supabase.table("AGENDA_OBSOLETA") \
-                    .select("status, updated_at") \
+                    .select("folio_i, status, updated_at") \
                     .like("status", "BLOQUEADO_%") \
                     .range(offset, offset + limit - 1) \
                     .execute()
@@ -732,6 +895,7 @@ class DataHandler:
                     break
                 offset += limit
 
+            locks_map = self.pool_store.get_locks_map([item.get('folio_i') for item in blocked_rows])
             counts = {}
             for a in asesoras:
                 counts[self._normalize(a)] = {"asesora": a, "tiene": 0, "hoy": 0}
@@ -746,10 +910,11 @@ class DataHandler:
                     continue
 
                 counts[key]["tiene"] += 1
-                up_str = item.get('updated_at')
-                if up_str:
+                folio_key = str(item.get('folio_i'))
+                ref_ts = (locks_map.get(folio_key) or {}).get('locked_at') or item.get('updated_at')
+                if ref_ts:
                     try:
-                        dt = self._parse_timestamptz(up_str)
+                        dt = self._parse_timestamptz(ref_ts)
                         if dt and dt.astimezone(tz_mex).date() == today_mx:
                             counts[key]["hoy"] += 1
                     except Exception:
