@@ -467,7 +467,7 @@ class DataHandler:
 
         return list(aliases)
 
-    AGENDA_PILOT_USERS = {"viri", "viridiana", "bety", "beatriz"}
+    AGENDA_PILOT_USERS = {"viri", "viridiana", "bety", "beatriz", "oralia"}
 
     def get_upcoming_agenda_for_agent(self, asesora_nombre):
         """Obtiene próximas asesorías de IDREPORTE_AGENDA_OBSOLETA con margen de +1 hora (solo lectura)."""
