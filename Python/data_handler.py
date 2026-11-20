@@ -443,21 +443,29 @@ class DataHandler:
         naive_dt = datetime.combine(date_obj, time_obj)
         return self.TZ_MEX.localize(naive_dt)
 
-    ASESOR_ALIASES = {
-        "viri": ["viri", "viridiana"],
-        "danya stefany": ["danya stefany", "danya"],
-        "bety": ["bety", "beatriz"],
-        "nat": ["nat", "natalia"],
-        "ana k.": ["ana k.", "ana g."],
-        "rosa": ["rosa", "rosy"],
-    }
-
     def _get_asesor_aliases(self, asesora_nombre):
+        """Obtiene los términos equivalentes desde la columna 'diccionario' de AsesorasActivas."""
         norm_name = self._normalize(asesora_nombre)
-        aliases = self.ASESOR_ALIASES.get(norm_name)
-        if aliases:
-            return [self._normalize(a) for a in aliases]
-        return [norm_name] if norm_name else []
+        if not norm_name:
+            return []
+        aliases = {norm_name}
+
+        try:
+            rows = self.sheets.obtener_datos_hoja("AsesorasActivas")
+            match = next(
+                (r for r in rows if self._normalize(r.get('nombre') or r.get('Nombre') or '') == norm_name),
+                None
+            )
+            if match:
+                raw_dict = match.get('diccionario') or match.get('Diccionario') or match.get('DICCIONARIO') or ''
+                for part in str(raw_dict).split(','):
+                    p = self._normalize(part)
+                    if p:
+                        aliases.add(p)
+        except Exception as e:
+            logger.error(f"DICCIONARIO ASESORAS ERROR: {e}")
+
+        return list(aliases)
 
     AGENDA_PILOT_USERS = {"viri", "viridiana", "bety", "beatriz"}
 

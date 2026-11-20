@@ -643,22 +643,33 @@
                 setLoading(false);
             };
 
+            const loadCalendarEvents = async (silent = false) => {
+                if (!user || !canUseAgendaMaestra) return;
+                if (!silent) setLoadingCalendar(true);
+                try {
+                    const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/my-calendar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ asesora: user })
+                    });
+                    const data = await res.json();
+                    setCalendarEvents(Array.isArray(data) ? data : []);
+                } catch (err) { console.error("Error al cargar calendario maestro"); }
+                if (!silent) setLoadingCalendar(false);
+            };
+
             const fetchMyCalendar = async () => {
                 if (!showCalendar) {
                     setShowCalendar(true);
-                    setLoadingCalendar(true);
-                    try {
-                        const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/my-calendar', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ asesora: user })
-                        });
-                        const data = await res.json();
-                        setCalendarEvents(Array.isArray(data) ? data : []);
-                    } catch (err) { console.error("Error al cargar calendario maestro"); }
-                    setLoadingCalendar(false);
+                    loadCalendarEvents(false);
                 } else { setShowCalendar(false); }
             };
+
+            useEffect(() => {
+                if (!user || !canUseAgendaMaestra || !showCalendar) return;
+                const agendaInterval = setInterval(() => loadCalendarEvents(true), 150000);
+                return () => clearInterval(agendaInterval);
+            }, [user, canUseAgendaMaestra, showCalendar]);
 
             const processQueue = async () => {
                 if (isSyncing.current) return;
