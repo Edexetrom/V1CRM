@@ -459,9 +459,13 @@ class DataHandler:
             return [self._normalize(a) for a in aliases]
         return [norm_name] if norm_name else []
 
+    AGENDA_PILOT_USERS = {"viri", "viridiana", "bety", "beatriz"}
+
     def get_upcoming_agenda_for_agent(self, asesora_nombre):
         """Obtiene próximas asesorías de IDREPORTE_AGENDA_OBSOLETA con margen de +1 hora (solo lectura)."""
         if not self.supabase or not asesora_nombre:
+            return []
+        if self._normalize(asesora_nombre) not in self.AGENDA_PILOT_USERS:
             return []
         try:
             now_mx = datetime.now(self.TZ_MEX)
