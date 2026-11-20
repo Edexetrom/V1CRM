@@ -218,6 +218,7 @@
             const [clients, setClients] = useState([]);
             const [loading, setLoading] = useState(false);
             const [modal, setModal] = useState(null);
+            const [prefillClient, setPrefillClient] = useState(null);
             const [selectedClient, setSelectedClient] = useState(null);
             const [filters, setFilters] = useState({ name: '', status: '', interest: '', dateRange: '' });
             const [statusAlert, setStatusAlert] = useState(null);
@@ -879,24 +880,38 @@
                                             ) : (
                                                 calendarEvents.map((ev, i) => {
                                                     const evMs = new Date(ev.start).getTime();
-                                                    const isNow = !isNaN(evMs) && Date.now() >= evMs && (Date.now() - evMs) <= 15 * 60 * 1000;
+                                                    const isNow = !isNaN(evMs) && Date.now() >= evMs && (Date.now() - evMs) <= 60 * 60 * 1000;
+                                                    const cleanTel = (ev.telefono || '').toString().replace(/\D/g, '').slice(-10);
                                                     return (
-                                                        <div key={i} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 border-l-4" style={{ borderLeftColor: isNow ? '#10b981' : activeTheme.primary }}>
-                                                            <div className="flex justify-between items-start gap-2 mb-2">
-                                                                <div>
-                                                                    {ev.folio_r && <span className="inline-block px-2 py-0.5 mb-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-black uppercase tracking-widest">{ev.folio_r}</span>}
-                                                                    <p className="font-black text-slate-700 text-[11px] leading-tight uppercase">{ev.summary}</p>
+                                                        <div key={i} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 border-l-4 flex flex-col justify-between" style={{ borderLeftColor: isNow ? '#10b981' : activeTheme.primary }}>
+                                                            <div>
+                                                                <div className="flex justify-between items-start gap-2 mb-2">
+                                                                    <div>
+                                                                        {ev.folio_r && <span className="inline-block px-2 py-0.5 mb-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-black uppercase tracking-widest">{ev.folio_r}</span>}
+                                                                        <p className="font-black text-slate-700 text-[11px] leading-tight uppercase">{ev.summary}</p>
+                                                                    </div>
+                                                                    {isNow ? (
+                                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase tracking-widest animate-pulse">En curso</span>
+                                                                    ) : (
+                                                                        <i className="far fa-clock text-slate-200 text-[10px]"></i>
+                                                                    )}
                                                                 </div>
-                                                                {isNow ? (
-                                                                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase tracking-widest animate-pulse">En curso</span>
-                                                                ) : (
-                                                                    <i className="far fa-clock text-slate-200 text-[10px]"></i>
-                                                                )}
+                                                                <p className="text-[10px] text-slate-500 font-bold italic mb-2">
+                                                                    {new Date(ev.start).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                                </p>
+                                                                {ev.description && (<p className="text-[9px] text-slate-400 font-bold border-t border-slate-50 pt-2 mt-2">{ev.description}</p>)}
                                                             </div>
-                                                            <p className="text-[10px] text-slate-500 font-bold italic mb-2">
-                                                                {new Date(ev.start).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
-                                                            </p>
-                                                            {ev.description && (<p className="text-[9px] text-slate-400 font-bold border-t border-slate-50 pt-2 mt-2">{ev.description}</p>)}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setPrefillClient({ Nombre: ev.nombre || '', Canal: cleanTel, folio_r: ev.folio_r || '' });
+                                                                    setModal('new');
+                                                                }}
+                                                                className="mt-3 w-full py-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[9px] font-black uppercase tracking-widest cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                                                            >
+                                                                <i className="fas fa-user-plus text-[9px]"></i> Pre-registrar
+                                                            </button>
                                                         </div>
                                                     );
                                                 })
@@ -999,7 +1014,8 @@
                     {modal === 'new' && <NewClientModal
                         theme={activeTheme}
                         user={user}
-                        onClose={() => setModal(null)}
+                        prefill={prefillClient}
+                        onClose={() => { setModal(null); setPrefillClient(null); }}
                         onRefresh={() => fetchClients(user)}
                         setStatus={setStatusAlert}
                         onQueueChange={setPendingCount}
@@ -1079,15 +1095,25 @@
         };
         // --- FIN MÓDULO POOL ---
 
-        const NewClientModal = ({ theme, user, onClose, onRefresh, setStatus, onQueueChange, existingClients }) => {
+        const NewClientModal = ({ theme, user, prefill, onClose, onRefresh, setStatus, onQueueChange, existingClients }) => {
             const [form, setForm] = useState({
-                Nombre: '', Canal: '', 'Fecha 1er Contacto': toSheetDate(getMexicoDate()),
-                'Nivel de Interés': INTERES_OPTIONS[2], 'Resumen Conversación': '', 'Fecha Próx. Contacto': '', 'Asesora': user, 'Estado Final': 'Seguimiento'
+                Nombre: prefill?.Nombre || '',
+                Canal: prefill?.Canal || '',
+                'Fecha 1er Contacto': toSheetDate(getMexicoDate()),
+                'Nivel de Interés': INTERES_OPTIONS[2],
+                'Resumen Conversación': '',
+                'Fecha Próx. Contacto': '',
+                'Asesora': user,
+                'Estado Final': 'Seguimiento'
             });
             const [files, setFiles] = useState([]);
             const [sending, setSending] = useState(false);
             const isSubmitting = useRef(false);
-            const [folioLookup, setFolioLookup] = useState({ loading: false, folio_r: '', found: false });
+            const [folioLookup, setFolioLookup] = useState({
+                loading: false,
+                folio_r: prefill?.folio_r || '',
+                found: Boolean(prefill?.folio_r)
+            });
 
             useEffect(() => {
                 const cleanInput = form.Canal.replace(/\D/g, '').slice(-10);

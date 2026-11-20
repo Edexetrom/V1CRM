@@ -460,12 +460,12 @@ class DataHandler:
         return [norm_name] if norm_name else []
 
     def get_upcoming_agenda_for_agent(self, asesora_nombre):
-        """Obtiene próximas asesorías de IDREPORTE_AGENDA_OBSOLETA con margen de +15 min (solo lectura)."""
+        """Obtiene próximas asesorías de IDREPORTE_AGENDA_OBSOLETA con margen de +1 hora (solo lectura)."""
         if not self.supabase or not asesora_nombre:
             return []
         try:
             now_mx = datetime.now(self.TZ_MEX)
-            cutoff = now_mx - timedelta(minutes=15)
+            cutoff = now_mx - timedelta(hours=1)
             alias_list = self._get_asesor_aliases(asesora_nombre)
             alias_set = set(alias_list)
 
