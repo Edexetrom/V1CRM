@@ -623,13 +623,25 @@ class DataHandler:
         if not self.supabase: return []
         all_data = []
         offset, limit = 0, 1000
+        cols = "id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento, folio_r"
+        fallback_cols = "id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento"
         try:
             today_mx = datetime.now(self.TZ_MEX).date()
             while True:
-                res = self.supabase.table("prospectos") \
-                    .select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento") \
-                    .order("updated_at", desc=True) \
-                    .range(offset, offset + limit - 1).execute()
+                try:
+                    res = self.supabase.table("prospectos") \
+                        .select(cols) \
+                        .order("updated_at", desc=True) \
+                        .range(offset, offset + limit - 1).execute()
+                except Exception as col_err:
+                    if "folio_r" in str(col_err):
+                        cols = fallback_cols
+                        res = self.supabase.table("prospectos") \
+                            .select(cols) \
+                            .order("updated_at", desc=True) \
+                            .range(offset, offset + limit - 1).execute()
+                    else:
+                        raise col_err
                 batch = res.data
                 if not batch: break
                 for item in batch: all_data.append(self._reconstruir_objeto_prospecto(item, today_mx))
@@ -749,14 +761,27 @@ class DataHandler:
         if not self.supabase or not agent_name: return []
         all_data = []
         offset, limit = 0, 1000
+        cols = "id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento, folio_r"
+        fallback_cols = "id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento"
         try:
             today_mx = datetime.now(self.TZ_MEX).date()
             while True:
-                res = self.supabase.table("prospectos") \
-                    .select("id, nombre, asesora, canal, fecha_registro, nivel_interes, fecha_proxima, estado_final, rendimiento") \
-                    .ilike("asesora", f"%{agent_name}%") \
-                    .order("updated_at", desc=True) \
-                    .range(offset, offset + limit - 1).execute()
+                try:
+                    res = self.supabase.table("prospectos") \
+                        .select(cols) \
+                        .ilike("asesora", f"%{agent_name}%") \
+                        .order("updated_at", desc=True) \
+                        .range(offset, offset + limit - 1).execute()
+                except Exception as col_err:
+                    if "folio_r" in str(col_err):
+                        cols = fallback_cols
+                        res = self.supabase.table("prospectos") \
+                            .select(cols) \
+                            .ilike("asesora", f"%{agent_name}%") \
+                            .order("updated_at", desc=True) \
+                            .range(offset, offset + limit - 1).execute()
+                    else:
+                        raise col_err
                 batch = res.data
                 if not batch: break
                 for item in batch:

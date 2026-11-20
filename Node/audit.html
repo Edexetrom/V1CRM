@@ -245,6 +245,10 @@
                 return () => clearInterval(intervalId);
             }, [user, mainTab]);
 
+            useEffect(() => {
+                setCurrentPage(1);
+            }, [filters]);
+
             const refreshAll = () => { fetchAllClients(); fetchSyncQueue(); fetchJournalTail(); fetchAgents(); fetchPoolSummary(); };
 
             const fetchAgents = async () => {
@@ -375,7 +379,7 @@
             const filteredClients = useMemo(() => {
                 const search = (filters.nombre || '').toLowerCase();
                 let result = processedClients.filter(c => {
-                    const matchesSearch = (search === '' || (c.Nombre && c.Nombre.toLowerCase().includes(search)) || (c['Canal (Tel/WhatsApp)'] || '').toString().includes(search));
+                    const matchesSearch = (search === '' || (c.Nombre && c.Nombre.toLowerCase().includes(search)) || (c['Canal (Tel/WhatsApp)'] || '').toString().includes(search) || (c.folio_r || '').toString().toLowerCase().includes(search));
                     const matchesAsesora = (filters.asesora === '' || c.Asesora === filters.asesora);
                     const matchesInteres = (filters.interes === '' || (c['Nivel de Interés'] && c['Nivel de Interés'].includes(filters.interes)));
                     const matchesEstado = (filters.estado === '' || c['Estado Final'] === filters.estado);
@@ -683,7 +687,7 @@
                                 </div>
 
                                 <div className="flex flex-wrap gap-2 items-center bg-slate-50/50 p-3 rounded-2xl">
-                                    <input type="text" placeholder="Nombre o Teléfono..." className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs flex-1 min-w-[200px] border border-transparent focus:border-slate-200 outline-none" value={filters.nombre} onChange={e => setFilters({ ...filters, nombre: e.target.value })} />
+                                    <input type="text" placeholder="Nombre, Teléfono o Folio R..." className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs flex-1 min-w-[200px] border border-transparent focus:border-slate-200 outline-none" value={filters.nombre} onChange={e => setFilters({ ...filters, nombre: e.target.value })} />
                                     <input type="date" title="Filtrar por Fecha de Registro" className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none text-slate-400" value={filters.fechaRegistro} onChange={e => setFilters({ ...filters, fechaRegistro: e.target.value })} />
                                     <select className="bg-white px-4 py-2.5 rounded-xl shadow-sm font-bold text-xs cursor-pointer border-none outline-none" value={filters.asesora} onChange={e => setFilters({ ...filters, asesora: e.target.value })}>
                                         <option value="">Asesoras</option>
@@ -719,20 +723,21 @@
                                         <table className="w-full text-left table-auto">
                                             <thead className="bg-slate-50 border-b border-slate-100">
                                                 <tr className="text-slate-400 text-[9px] uppercase font-black tracking-widest">
-                                                    <th className="px-5 py-4">Asesora</th>
-                                                    <th className="px-5 py-4">Cliente</th>
-                                                    <th className="px-5 py-4">Registro</th>
-                                                    <th className="px-5 py-4">Interés</th>
-                                                    <th className="px-5 py-4">Cita</th>
-                                                    <th className="px-5 py-4">Estado</th>
-                                                    <th className="px-5 py-4">Status</th>
-                                                    <th className="px-5 py-4 text-right pr-8">Acción</th>
+                                                    <th className="px-4 py-4">Asesora</th>
+                                                    <th className="px-4 py-4">Folio R</th>
+                                                    <th className="px-4 py-4">Cliente</th>
+                                                    <th className="px-4 py-4">Registro</th>
+                                                    <th className="px-4 py-4">Interés</th>
+                                                    <th className="px-4 py-4">Cita</th>
+                                                    <th className="px-4 py-4">Estado</th>
+                                                    <th className="px-4 py-4">Status</th>
+                                                    <th className="px-4 py-4 text-right pr-6">Acción</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
                                                 {paginatedClients.map((c, i) => (
                                                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="px-5 py-3.5">
+                                                        <td className="px-4 py-3.5">
                                                             {/* --- INICIO SEMAFORO MATEMATICO --- */}
                                                             <span className={`px-2.5 py-1 rounded-lg border inline-block bg-slate-100 text-[9px] uppercase border-slate-200 ${(() => {
                                                                 const dt = c['Fecha Próx. Contacto'];
@@ -750,25 +755,32 @@
                                                             </span>
                                                             {/* --- FIN SEMAFORO MATEMATICO --- */}
                                                         </td>
-                                                        <td className="px-5 py-3.5 font-bold text-slate-700 text-[11px] whitespace-nowrap">{c.Nombre}</td>
-                                                        <td className="px-5 py-3.5 font-bold text-slate-400 text-[10px]">{c['Fecha 1er Contacto']}</td>
-                                                        <td className="px-5 py-3.5">
+                                                        <td className="px-4 py-3.5 whitespace-nowrap">
+                                                            {c.folio_r ? (
+                                                                <span className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-black uppercase tracking-widest">{c.folio_r}</span>
+                                                            ) : (
+                                                                <span className="text-[10px] font-bold text-slate-300">--</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3.5 font-bold text-slate-700 text-[11px] whitespace-nowrap">{c.Nombre}</td>
+                                                        <td className="px-4 py-3.5 font-bold text-slate-400 text-[10px]">{c['Fecha 1er Contacto']}</td>
+                                                        <td className="px-4 py-3.5">
                                                             <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase ${c['Nivel de Interés'] && c['Nivel de Interés'].includes('Alto') ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'}`}>
                                                                 {c['Nivel de Interés'] ? c['Nivel de Interés'].split(' <')[0] : 'N/A'}
                                                             </span>
                                                         </td>
-                                                        <td className="px-5 py-3.5 text-[11px] font-bold text-slate-500 whitespace-nowrap">{c['Fecha Próx. Contacto'] || '--'}</td>
-                                                        <td className="px-5 py-3.5"><span className={`px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' : c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{c['Estado Final']}</span></td>
-                                                        <td className="px-5 py-3.5"><span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border ${c._rendimientoClass}`}>{c._rendimientoLabel}</span></td>
-                                                        <td className="px-5 py-3.5 text-right pr-8 flex justify-end gap-2">
-                                                            <button onClick={() => handleSelectClient(c)} className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-slate-100 hover:text-sky-500 transition-all cursor-pointer"><i className="fas fa-folder-open text-xs"></i></button>
-                                                            {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c)} className="w-8 h-8 rounded-lg bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all cursor-pointer"><i className="fas fa-trash-alt text-xs"></i></button>}
+                                                        <td className="px-4 py-3.5 text-[11px] font-bold text-slate-500 whitespace-nowrap">{c['Fecha Próx. Contacto'] || '--'}</td>
+                                                        <td className="px-4 py-3.5"><span className={`px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest ${c['Estado Final'] === 'Venta' ? 'bg-green-50 text-green-700 border-green-200' : c['Estado Final'] === 'No interesado' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{c['Estado Final']}</span></td>
+                                                        <td className="px-4 py-3.5"><span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg border ${c._rendimientoClass}`}>{c._rendimientoLabel}</span></td>
+                                                        <td className="px-4 py-3.5 text-right pr-6 flex justify-end gap-2">
+                                                            <button onClick={() => handleSelectClient(c)} title="Abrir expediente" className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-slate-100 hover:text-sky-500 transition-all cursor-pointer"><i className="fas fa-folder-open text-xs"></i></button>
+                                                            {permisos !== PERMISOS.VISUALIZADOR && <button onClick={() => setDeleteConfirmation(c)} title="Eliminar expediente" className="w-8 h-8 rounded-lg bg-red-50 text-red-200 hover:text-red-500 shadow-sm flex items-center justify-center border border-red-100 transition-all cursor-pointer"><i className="fas fa-trash-alt text-xs"></i></button>}
                                                         </td>
                                                     </tr>
                                                 ))}
                                                 {filteredClients.length === 0 && (
                                                     <tr>
-                                                        <td colSpan="8" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">No se encontraron expedientes</td>
+                                                        <td colSpan="9" className="py-20 text-center opacity-20 font-black uppercase tracking-widest text-xs">No se encontraron expedientes</td>
                                                     </tr>
                                                 )}
                                             </tbody>
@@ -779,11 +791,14 @@
                                         <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
                                             <div>
                                                 <p className="text-[10px] font-black text-slate-800 uppercase tracking-tighter leading-none mb-1">Página {currentPage} de {totalPages}</p>
-                                                <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em] leading-none">Total: {filteredClients.length} Registros</p>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none">
+                                                    Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredClients.length)} de {filteredClients.length} registros
+                                                </p>
                                             </div>
 
-                                            <div className="flex items-center gap-2 bg-white/50 p-2 rounded-2xl shadow-inner border border-slate-100">
-                                                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="premium-nav-arrow disabled:opacity-20"><i className="fas fa-chevron-left text-[9px]"></i></button>
+                                            <div className="flex items-center gap-1.5 bg-white/50 p-2 rounded-2xl shadow-inner border border-slate-100">
+                                                <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} title="Primera página" className="premium-nav-arrow disabled:opacity-20"><i className="fas fa-angle-double-left text-[9px]"></i></button>
+                                                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} title="Anterior" className="premium-nav-arrow disabled:opacity-20"><i className="fas fa-chevron-left text-[9px]"></i></button>
                                                 <div className="flex items-center gap-1.5 px-2">
                                                     {[...Array(totalPages)].map((_, i) => {
                                                         const pNum = i + 1;
@@ -796,7 +811,8 @@
                                                         );
                                                     })}
                                                 </div>
-                                                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="premium-nav-arrow disabled:opacity-20"><i className="fas fa-chevron-right text-[9px]"></i></button>
+                                                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} title="Siguiente" className="premium-nav-arrow disabled:opacity-20"><i className="fas fa-chevron-right text-[9px]"></i></button>
+                                                <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} title="Última página" className="premium-nav-arrow disabled:opacity-20"><i className="fas fa-angle-double-right text-[9px]"></i></button>
                                             </div>
                                         </div>
                                     )}
