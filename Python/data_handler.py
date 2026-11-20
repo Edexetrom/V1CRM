@@ -411,6 +411,147 @@ class DataHandler:
             "nombre": best_nombre
         }
 
+    def _parse_fecha_hora_asesoria(self, fecha_str, hora_str):
+        """Combina fecha_de_la_asesoria y hora_cita en un datetime aware en America/Mexico_City."""
+        if not fecha_str or not hora_str:
+            return None
+        f_clean = str(fecha_str).strip()
+        h_clean = str(hora_str).strip().lower().replace('p. m.', 'pm').replace('a. m.', 'am').replace('p.m.', 'pm').replace('a.m.', 'am')
+
+        # 1. Parsear fecha
+        date_obj = None
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+            try:
+                date_obj = datetime.strptime(f_clean[:10], fmt).date()
+                break
+            except Exception:
+                continue
+        if not date_obj:
+            return None
+
+        # 2. Parsear hora
+        time_obj = None
+        for h_fmt in ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p", "%I:%M%p", "%I %p"):
+            try:
+                time_obj = datetime.strptime(h_clean.upper(), h_fmt).time()
+                break
+            except Exception:
+                continue
+        if not time_obj:
+            return None
+
+        naive_dt = datetime.combine(date_obj, time_obj)
+        return self.TZ_MEX.localize(naive_dt)
+
+    ASESOR_ALIASES = {
+        "viri": ["viri", "viridiana"],
+        "danya stefany": ["danya stefany", "danya"],
+        "bety": ["bety", "beatriz"],
+        "nat": ["nat", "natalia"],
+        "ana k.": ["ana k.", "ana g."],
+        "rosa": ["rosa", "rosy"],
+    }
+
+    def _get_asesor_aliases(self, asesora_nombre):
+        norm_name = self._normalize(asesora_nombre)
+        aliases = self.ASESOR_ALIASES.get(norm_name)
+        if aliases:
+            return [self._normalize(a) for a in aliases]
+        return [norm_name] if norm_name else []
+
+    def get_upcoming_agenda_for_agent(self, asesora_nombre):
+        """Obtiene próximas asesorías de IDREPORTE_AGENDA_OBSOLETA con margen de +15 min (solo lectura)."""
+        if not self.supabase or not asesora_nombre:
+            return []
+        try:
+            now_mx = datetime.now(self.TZ_MEX)
+            cutoff = now_mx - timedelta(minutes=15)
+            alias_list = self._get_asesor_aliases(asesora_nombre)
+            alias_set = set(alias_list)
+
+            rows = []
+            seen_keys = set()
+            for token in alias_list:
+                offset, limit = 0, 1000
+                while True:
+                    res = self.supabase.table("IDREPORTE_AGENDA_OBSOLETA") \
+                        .select("folio_r, nombre, telefono, fecha_de_la_asesoria, hora_cita, asesor") \
+                        .ilike("asesor", f"%{token}%") \
+                        .range(offset, offset + limit - 1) \
+                        .execute()
+                    batch = res.data or []
+                    for r in batch:
+                        dedup_key = (r.get("folio_r"), r.get("fecha_de_la_asesoria"), r.get("hora_cita"))
+                        if dedup_key not in seen_keys:
+                            seen_keys.add(dedup_key)
+                            rows.append(r)
+                    if len(batch) < limit:
+                        break
+                    offset += limit
+
+            events = []
+            for r in rows:
+                if self._normalize(r.get("asesor") or "") not in alias_set:
+                    continue
+                ev_dt = self._parse_fecha_hora_asesoria(r.get("fecha_de_la_asesoria"), r.get("hora_cita"))
+                if not ev_dt or ev_dt < cutoff:
+                    continue
+                folio_r = str(r.get("folio_r") or "").strip()
+                nombre = str(r.get("nombre") or "").strip()
+                telefono = str(r.get("telefono") or "").strip()
+                events.append((
+                    ev_dt,
+                    {
+                        "summary": nombre or folio_r or "Asesoría",
+                        "folio_r": folio_r,
+                        "nombre": nombre,
+                        "telefono": telefono,
+                        "start": ev_dt.isoformat(),
+                        "description": f"Tel: {telefono}" if telefono else ""
+                    }
+                ))
+
+            events.sort(key=lambda pair: pair[0])
+            return [ev for _, ev in events[:20]]
+        except Exception as e:
+            logger.error(f"AGENDA IDREPORTE ERROR: {e}")
+            return []
+
+    def validate_asesor_names(self):
+        """Compara nombres de AsesorasActivas (Sheets) vs asesor en IDREPORTE_AGENDA_OBSOLETA."""
+        try:
+            active_names = self.obtener_asesoras_activas()
+            active_map = {self._normalize(n): n for n in active_names}
+
+            idrep_map = {}
+            offset, limit = 0, 1000
+            while True:
+                res = self.supabase.table("IDREPORTE_AGENDA_OBSOLETA") \
+                    .select("asesor") \
+                    .range(offset, offset + limit - 1) \
+                    .execute()
+                batch = res.data or []
+                for r in batch:
+                    raw = str(r.get("asesor") or "").strip()
+                    if raw:
+                        idrep_map[self._normalize(raw)] = raw
+                if len(batch) < limit:
+                    break
+                offset += limit
+
+            coinciden = sorted([active_map[k] for k in active_map if k in idrep_map], key=self._normalize)
+            solo_en_sheets = sorted([active_map[k] for k in active_map if k not in idrep_map], key=self._normalize)
+            solo_en_idreporte = sorted([idrep_map[k] for k in idrep_map if k not in active_map], key=self._normalize)
+
+            return {
+                "coinciden": coinciden,
+                "solo_en_sheets": solo_en_sheets,
+                "solo_en_idreporte": solo_en_idreporte
+            }
+        except Exception as e:
+            logger.error(f"VALIDATE ASESORES ERROR: {e}")
+            return {"status": "error", "message": str(e)}
+
     def _formatear_fecha_sql(self, fecha_str):
         if not fecha_str or fecha_str in ['--', '', None]: return None
         try:

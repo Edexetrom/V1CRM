@@ -641,19 +641,17 @@
             const fetchMyCalendar = async () => {
                 if (!showCalendar) {
                     setShowCalendar(true);
-                    if (calendarEvents.length === 0) {
-                        setLoadingCalendar(true);
-                        try {
-                            const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/my-calendar', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ asesora: user })
-                            });
-                            const data = await res.json();
-                            setCalendarEvents(Array.isArray(data) ? data : []);
-                        } catch (err) { console.error("Error al cargar calendario maestro"); }
-                        setLoadingCalendar(false);
-                    }
+                    setLoadingCalendar(true);
+                    try {
+                        const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/my-calendar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ asesora: user })
+                        });
+                        const data = await res.json();
+                        setCalendarEvents(Array.isArray(data) ? data : []);
+                    } catch (err) { console.error("Error al cargar calendario maestro"); }
+                    setLoadingCalendar(false);
                 } else { setShowCalendar(false); }
             };
 
@@ -879,18 +877,29 @@
                                                     <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No hay citas programadas en el calendario maestro</p>
                                                 </div>
                                             ) : (
-                                                calendarEvents.map((ev, i) => (
-                                                    <div key={i} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 border-l-4" style={{ borderLeftColor: activeTheme.primary }}>
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <p className="font-black text-slate-700 text-[11px] leading-tight uppercase">{ev.summary}</p>
-                                                            <i className="far fa-clock text-slate-200 text-[10px]"></i>
+                                                calendarEvents.map((ev, i) => {
+                                                    const evMs = new Date(ev.start).getTime();
+                                                    const isNow = !isNaN(evMs) && Date.now() >= evMs && (Date.now() - evMs) <= 15 * 60 * 1000;
+                                                    return (
+                                                        <div key={i} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-50 border-l-4" style={{ borderLeftColor: isNow ? '#10b981' : activeTheme.primary }}>
+                                                            <div className="flex justify-between items-start gap-2 mb-2">
+                                                                <div>
+                                                                    {ev.folio_r && <span className="inline-block px-2 py-0.5 mb-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-black uppercase tracking-widest">{ev.folio_r}</span>}
+                                                                    <p className="font-black text-slate-700 text-[11px] leading-tight uppercase">{ev.summary}</p>
+                                                                </div>
+                                                                {isNow ? (
+                                                                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase tracking-widest animate-pulse">En curso</span>
+                                                                ) : (
+                                                                    <i className="far fa-clock text-slate-200 text-[10px]"></i>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-[10px] text-slate-500 font-bold italic mb-2">
+                                                                {new Date(ev.start).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                            </p>
+                                                            {ev.description && (<p className="text-[9px] text-slate-400 font-bold border-t border-slate-50 pt-2 mt-2">{ev.description}</p>)}
                                                         </div>
-                                                        <p className="text-[10px] text-slate-400 font-bold italic mb-2">
-                                                            {new Date(ev.start).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                                        </p>
-                                                        {ev.description && (<p className="text-[9px] text-slate-400 line-clamp-2 border-t border-slate-50 pt-2 mt-2">{ev.description}</p>)}
-                                                    </div>
-                                                ))
+                                                    );
+                                                })
                                             )}
                                         </div>
                                     )}

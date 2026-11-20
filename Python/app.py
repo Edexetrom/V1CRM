@@ -32,69 +32,24 @@ def background_sync(action_type, data):
 @app.route('/api/my-calendar', methods=['POST', 'OPTIONS'])
 def get_my_calendar():
     """
-    Endpoint para obtener la agenda de la asesora desde Google Sheets y Calendar.
-    Implementación robusta con normalización de búsqueda.
+    Endpoint para obtener próximas asesorías desde IDREPORTE_AGENDA_OBSOLETA (+15 min de margen).
     """
     if request.method == 'OPTIONS':
         return jsonify({"status": "ok"}), 200
     try:
-        data = request.json
-        agent_name = data.get('asesora', '').strip().lower()
-        
-        logger.info(f"CALENDARIO: Solicitud para: '{agent_name}'")
-        
-        # Acceso al libro de trabajo a través del handler
-        ws = handler.sheets.workbook.worksheet("AsesorasActivas")
-        
-        # Obtenemos los encabezados reales del Excel
-        headers = ws.row_values(1)
-        
-        # Buscamos en qué posición están las columnas necesarias
-        col_nombre_idx = -1
-        col_calendar_idx = -1
-        
-        for i, h in enumerate(headers):
-            norm_h = handler._normalize(h) 
-            if norm_h in ['nombre', 'asesora']:
-                col_nombre_idx = i
-            if norm_h in ['idcalendario', 'calendarioid', 'id_calendario']:
-                col_calendar_idx = i
-
-        if col_nombre_idx == -1:
-            logger.error("CALENDARIO ERROR: No se encontró la columna 'Nombre' o 'Asesora'")
-            return jsonify({"error": "Estructura de Excel inválida"}), 500
-
-        # Buscamos la fila de la asesora manualmente por índice
-        records = ws.get_all_values()[1:] # Saltamos encabezados
-        agent_row = None
-        
-        for row in records:
-            if len(row) > col_nombre_idx:
-                val_nombre = str(row[col_nombre_idx]).strip().lower()
-                if val_nombre == agent_name:
-                    agent_row = row
-                    break
-        
-        if not agent_row:
-            logger.warning(f"CALENDARIO: No se encontró a '{agent_name}' en las filas.")
-            return jsonify({"error": f"Asesora '{agent_name}' no hallada"}), 404
-            
-        # Extraemos el ID del calendario
-        calendar_id = ""
-        if col_calendar_idx != -1 and len(agent_row) > col_calendar_idx:
-            calendar_id = str(agent_row[col_calendar_idx]).strip()
-
-        if not calendar_id or calendar_id.lower() == 'none':
-            logger.info(f"CALENDARIO: '{agent_name}' no tiene ID de calendario configurado.")
+        data = request.json or {}
+        agent_name = str(data.get('asesora') or '').strip()
+        if not agent_name:
             return jsonify([])
-            
-        logger.info(f"CALENDARIO: ¡Éxito! Conectando ID: '{calendar_id}'")
-        events = handler.get_calendar_events(calendar_id)
+        events = handler.get_upcoming_agenda_for_agent(agent_name)
         return jsonify(events)
-        
     except Exception as e:
         logger.error(f"CALENDARIO ERROR CRÍTICO: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/audit/validate-asesores', methods=['GET'])
+def validate_asesores():
+    return jsonify(handler.validate_asesor_names())
 
 # --- OTROS ENDPOINTS ---
 
