@@ -204,10 +204,16 @@
                     ? String(raw.folios_r_historial).split(',').map(s => s.trim()).filter(Boolean)
                     : (raw.folio_r ? [raw.folio_r] : []));
 
-            for (let i = 1; i <= 30; i++) {
-                n[`Fecha Seguimiento ${i}`] = raw[`fecha_seguimiento_${i}`] || raw[`Fecha Seguimiento ${i}`] || null;
-                n[`Notas Seguimiento ${i}`] = raw[`notas_seguimiento_${i}`] || raw[`Notas Seguimiento ${i}`] || null;
-            }
+            Object.keys(raw).forEach(k => {
+                const mSqlF = k.match(/^fecha_seguimiento_(\d+)$/);
+                if (mSqlF && raw[k]) n[`Fecha Seguimiento ${mSqlF[1]}`] = raw[k];
+                const mUiF = k.match(/^Fecha Seguimiento (\d+)$/);
+                if (mUiF && raw[k]) n[`Fecha Seguimiento ${mUiF[1]}`] = raw[k];
+                const mSqlN = k.match(/^notas_seguimiento_(\d+)$/);
+                if (mSqlN && raw[k] !== undefined) n[`Notas Seguimiento ${mSqlN[1]}`] = raw[k];
+                const mUiN = k.match(/^Notas Seguimiento (\d+)$/);
+                if (mUiN && raw[k] !== undefined) n[`Notas Seguimiento ${mUiN[1]}`] = raw[k];
+            });
             return n;
         };
 
@@ -1010,12 +1016,14 @@
 
             const followUps = useMemo(() => {
                 let list = [];
-                for (let i = 1; i <= 30; i++) {
-                    if (client[`Fecha Seguimiento ${i}`]) {
-                        list.push({ n: i, fecha: client[`Fecha Seguimiento ${i}`], nota: client[`Notas Seguimiento ${i}`] });
+                Object.keys(client).forEach(k => {
+                    const m = k.match(/^Fecha Seguimiento (\d+)$/);
+                    if (m && client[k]) {
+                        const n = parseInt(m[1], 10);
+                        list.push({ n, fecha: client[k], nota: client[`Notas Seguimiento ${n}`] });
                     }
-                }
-                return list.reverse();
+                });
+                return list.sort((a, b) => b.n - a.n);
             }, [client]);
 
             const FIELD_LABELS = {

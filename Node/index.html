@@ -145,14 +145,12 @@
         const normalizeData = (data) => {
             if (!data) return {};
             const normalized = { ...data };
-            for (let i = 1; i <= 30; i++) {
-                const sqlFecha = `fecha_seguimiento_${i}`;
-                const sqlNota = `notas_seguimiento_${i}`;
-                const uiFecha = `Fecha Seguimiento ${i}`;
-                const uiNota = `Notas Seguimiento ${i}`;
-                if (data[sqlFecha] !== undefined) normalized[uiFecha] = data[sqlFecha];
-                if (data[sqlNota] !== undefined) normalized[uiNota] = data[sqlNota];
-            }
+            Object.keys(data).forEach(k => {
+                const mFecha = k.match(/^fecha_seguimiento_(\d+)$/);
+                if (mFecha && data[k] !== undefined) normalized[`Fecha Seguimiento ${mFecha[1]}`] = data[k];
+                const mNota = k.match(/^notas_seguimiento_(\d+)$/);
+                if (mNota && data[k] !== undefined) normalized[`Notas Seguimiento ${mNota[1]}`] = data[k];
+            });
             normalized.Nombre = data.nombre || data.Nombre || "Sin Nombre";
             normalized.Canal = data.canal || data.Canal || data['Canal (Tel/WhatsApp)'] || "";
             normalized['Estado Final'] = data.estado_final || data['Estado Final'] || "Seguimiento";
@@ -1309,21 +1307,23 @@
 
             const completedList = useMemo(() => {
                 let list = [];
-                for (let i = 1; i <= 30; i++) {
-                    const fKey = `Fecha Seguimiento ${i}`;
-                    const nKey = `Notas Seguimiento ${i}`;
-                    if (client[fKey]) list.push({ n: i, fecha: client[fKey], nota: client[nKey] });
-                }
-                return list;
+                Object.keys(client).forEach(k => {
+                    const m = k.match(/^Fecha Seguimiento (\d+)$/);
+                    if (m && client[k]) {
+                        const n = parseInt(m[1], 10);
+                        list.push({ n, fecha: client[k], nota: client[`Notas Seguimiento ${n}`] });
+                    }
+                });
+                return list.sort((a, b) => a.n - b.n);
             }, [client]);
 
             const nextIdx = useMemo(() => {
-                for (let i = 1; i <= 30; i++) { if (!client[`Fecha Seguimiento ${i}`]) return i; }
-                return 31;
-            }, [client]);
+                if (completedList.length === 0) return 1;
+                return completedList[completedList.length - 1].n + 1;
+            }, [completedList]);
 
             useEffect(() => {
-                if (tab === 'new' && nextIdx <= 30 && (!localForm[`Notas Seguimiento ${nextIdx}`] || localForm[`Notas Seguimiento ${nextIdx}`] === '')) {
+                if (tab === 'new' && (!localForm[`Notas Seguimiento ${nextIdx}`] || localForm[`Notas Seguimiento ${nextIdx}`] === '')) {
                     setLocalForm(prev => ({
                         ...prev,
                         [`Fecha Seguimiento ${nextIdx}`]: toSheetDate(getMexicoDate()),
@@ -1363,7 +1363,7 @@
                     'Fecha Próx. Contacto': localForm['Fecha Próx. Contacto'],
                     'Comentarios': localForm['Comentarios']
                 };
-                if (tab === 'new' && nextIdx <= 30) {
+                if (tab === 'new') {
                     updates[`Fecha Seguimiento ${nextIdx}`] = localForm[`Fecha Seguimiento ${nextIdx}`];
                     updates[`Notas Seguimiento ${nextIdx}`] = localForm[`Notas Seguimiento ${nextIdx}`];
                 }
@@ -1415,7 +1415,7 @@
                         </div>
                         <div className="chrome-tab-container flex flex-wrap items-center gap-2 bg-slate-100/80 pt-3 px-6 border-b border-slate-200 shrink-0">
                             {['base', 'history', 'new', 'notes'].map(t => {
-                                if (t === 'new' && (isLocked || nextIdx > 30)) return null;
+                                if (t === 'new' && isLocked) return null;
                                 const icons = { base: 'fa-id-card', history: 'fa-history', new: 'fa-edit', notes: 'fa-sticky-note' };
                                 const labels = { base: 'Expediente', history: 'Gestiones', new: 'Nuevo Seguimiento', notes: 'Auditoría' };
                                 const isActive = tab === t;
@@ -1486,7 +1486,7 @@
                         </div>
                         <div className="p-8 bg-slate-50/30 border-t border-slate-100 flex flex-wrap gap-4 shrink-0">
                             <button type="button" onClick={onClose} className="flex-1 py-4 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all border-none outline-none cursor-pointer">Cerrar</button>
-                            {(!isLocked && nextIdx <= 30 && tab === 'base') && (
+                            {(!isLocked && tab === 'base') && (
                                 <button type="button" onClick={() => setTab('new')} className="flex-[2] py-4 rounded-3xl text-white font-black text-sm shadow-xl hover:brightness-110 uppercase tracking-widest transition-all border-none outline-none cursor-pointer flex items-center justify-center gap-2" style={{ backgroundColor: theme.primary }}>
                                     <i className="fas fa-plus-circle"></i> Nuevo Seguimiento #{nextIdx}
                                 </button>

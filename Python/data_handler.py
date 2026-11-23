@@ -879,7 +879,7 @@ class DataHandler:
         segs.sort(key=lambda x: x.get('numero_paso', 0))
         for s in segs:
             paso = s.get('numero_paso')
-            if paso and 1 <= paso <= 30:
+            if paso and paso >= 1:
                 p[f'fecha_seguimiento_{paso}'] = self._formatear_fecha_ui(s.get('fecha_seguimiento'))
                 p[f'notas_seguimiento_{paso}'] = s.get('nota_seguimiento')
         p.pop('seguimientos', None); p.pop('seguimientos!seguimientos_prospecto_id_fkey', None)
