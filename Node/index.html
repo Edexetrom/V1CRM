@@ -257,20 +257,25 @@
             useEffect(() => { setCurrentPage(1); }, [filters]);
 
             // --- INICIO MÓDULO POOL ---
+            const [takingLead, setTakingLead] = useState(false);
+
             const fetchPool = async () => {
                 setPoolLoading(true);
                 try {
+                    const ts = Date.now();
                     const url = user
-                        ? `https://crmasesorasapi.libresdeumas.com/api/pool?asesora=${encodeURIComponent(user)}`
-                        : 'https://crmasesorasapi.libresdeumas.com/api/pool';
-                    const res = await fetch(url);
+                        ? `https://crmasesorasapi.libresdeumas.com/api/pool?asesora=${encodeURIComponent(user.trim())}&_t=${ts}`
+                        : `https://crmasesorasapi.libresdeumas.com/api/pool?_t=${ts}`;
+                    const res = await fetch(url, { cache: 'no-store' });
                     const data = await res.json();
-                    setPoolData(data || []);
+                    setPoolData(Array.isArray(data) ? data : []);
                 } catch (e) { console.error(e); }
                 setPoolLoading(false);
             };
 
             const takePool = async (lead_id) => {
+                if (takingLead) return;
+                setTakingLead(true);
                 try {
                     const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/take', {
                         method: 'POST',
@@ -280,13 +285,16 @@
                     const data = await res.json();
                     if (!res.ok || data.status === 'error') {
                         setStatusAlert({ type: 'error', title: 'Error', message: data.message || 'Error al apartar.' });
-                    } else {
-                        fetchPool();
                     }
+                    await fetchPool();
                 } catch (e) { console.error(e); }
+                setTakingLead(false);
             };
 
-            const myBlockedCount = useMemo(() => poolData.filter(p => p.status === `BLOQUEADO_${user}`).length, [poolData, user]);
+            const myBlockedCount = useMemo(() => {
+                const targetStatus = `bloqueado_${(user || '').trim().toLowerCase()}`;
+                return poolData.filter(p => (p.status || '').trim().toLowerCase() === targetStatus).length;
+            }, [poolData, user]);
 
             const PoolView = () => {
                 const [selectedIds, setSelectedIds] = useState([]);
@@ -335,8 +343,9 @@
                     return { daysAgo, label: `Hace ${daysAgo} días`, time, bucket: 'anteriores', badgeClass: 'bg-slate-100 text-slate-500 border-slate-200', tsMs: d.getTime() };
                 };
 
+                const targetBlockedStatus = `bloqueado_${(user || '').trim().toLowerCase()}`;
                 const misReclamados = poolData
-                    .filter(p => p.status === `BLOQUEADO_${user}`)
+                    .filter(p => (p.status || '').trim().toLowerCase() === targetBlockedStatus)
                     .map(p => ({ ...p, _dayMeta: getDayMeta(p) }))
                     .sort((a, b) => b._dayMeta.tsMs - a._dayMeta.tsMs);
 
@@ -378,8 +387,11 @@
                 const allowedTotal = Math.max(0, 250 - misReclamados.length);
                 const allowedDaily = Math.max(0, 10 - tomadosHoy);
                 const allowedSelection = Math.min(allowedTotal, allowedDaily);
+                const remainingAfterSelection = Math.max(0, allowedSelection - selectedIds.length);
+                const selectionFull = allowedSelection === 0 || selectedIds.length >= allowedSelection;
 
                 const handleToggleSelection = (folio_i) => {
+                    if (takingLead || poolLoading) return;
                     if (selectedIds.includes(folio_i)) {
                         setSelectedIds(selectedIds.filter(id => id !== folio_i));
                     } else {
@@ -390,19 +402,35 @@
                 };
 
                 const handleTakeMultiple = async () => {
-                    if (selectedIds.length === 0) return;
+                    if (selectedIds.length === 0 || takingLead) return;
+                    const toTake = selectedIds.slice(0, allowedSelection);
+                    setTakingLead(true);
                     setPoolLoading(true);
-                    for (let id of selectedIds) {
+                    let lastError = null;
+                    for (let id of toTake) {
                         try {
-                            await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/take', {
+                            const res = await fetch('https://crmasesorasapi.libresdeumas.com/api/pool/take', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ lead_id: id, nombre_asesora: user })
                             });
-                        } catch (e) { console.error(e); }
+                            const data = await res.json();
+                            if (!res.ok || data.status === 'error') {
+                                lastError = data.message || 'No se pudo apartar uno o más prospectos.';
+                                if (res.status === 403) break;
+                            }
+                        } catch (e) {
+                            console.error(e);
+                            lastError = 'Error de conexión al apartar.';
+                            break;
+                        }
                     }
                     setSelectedIds([]);
-                    fetchPool();
+                    await fetchPool();
+                    setTakingLead(false);
+                    if (lastError) {
+                        setStatusAlert({ type: 'error', title: 'Aviso de Pool', message: lastError });
+                    }
                 };
 
                 const totalReclamadosPages = Math.max(1, Math.ceil(misReclamadosFiltered.length / reclamadosPerPage));
@@ -541,11 +569,18 @@
                             </div>
                         ) : (
                             <>
-                                <div className="flex justify-between items-center mb-2 px-4 mt-8">
-                                    <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Pool Libre</h3>
+                                <div className="flex flex-wrap justify-between items-center gap-3 mb-2 px-4 mt-8">
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest">Pool Libre</h3>
+                                        <span className={`px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest border ${selectionFull ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-sky-50 text-sky-700 border-sky-200'}`}>
+                                            {selectionFull
+                                                ? `Cupo diario completo (${tomadosHoy + selectedIds.length}/10)`
+                                                : `Puedes tomar hasta ${remainingAfterSelection} más hoy`}
+                                        </span>
+                                    </div>
                                     {selectedIds.length > 0 && (
-                                        <button onClick={handleTakeMultiple} className="px-6 py-2.5 bg-sky-500 text-white rounded-xl uppercase text-[10px] font-black hover:bg-sky-600 transition-colors shadow-md cursor-pointer border-none">
-                                            Tomar {selectedIds.length} seleccionado(s)
+                                        <button onClick={handleTakeMultiple} disabled={takingLead || poolLoading} className="px-6 py-2.5 bg-sky-500 text-white rounded-xl uppercase text-[10px] font-black hover:bg-sky-600 transition-colors shadow-md cursor-pointer border-none disabled:opacity-40">
+                                            {takingLead ? 'Apartando...' : `Tomar ${selectedIds.length} seleccionado(s)`}
                                         </button>
                                     )}
                                 </div>
@@ -567,16 +602,17 @@
                                                     poolLibre.length === 0 ? <tr><td colSpan="6" className="py-24 text-center opacity-30 font-black uppercase text-xs tracking-[0.4em]">Pool Vacío</td></tr> :
                                                         poolLibrePaginated.map(p => {
                                                             const isSelected = selectedIds.includes(p.folio_i);
-                                                            const canSelect = isSelected || selectedIds.length < allowedSelection;
+                                                            const canSelect = !takingLead && !poolLoading && (isSelected || selectedIds.length < allowedSelection);
+                                                            const canSingleTake = !takingLead && !poolLoading && allowedSelection > 0 && (selectedIds.length === 0 || isSelected);
                                                             return (
-                                                                <tr key={p.folio_i} className={`hover:bg-slate-50/50 transition-colors ${isSelected ? 'bg-sky-50/50' : ''}`}>
+                                                                <tr key={p.folio_i} className={`transition-colors ${isSelected ? 'bg-sky-50/60' : !canSelect ? 'opacity-50' : 'hover:bg-slate-50/50'}`}>
                                                                     <td className="px-8 py-5">
                                                                         <input
                                                                             type="checkbox"
                                                                             checked={isSelected}
                                                                             onChange={() => handleToggleSelection(p.folio_i)}
                                                                             disabled={!canSelect}
-                                                                            className="w-4 h-4 accent-sky-500 cursor-pointer"
+                                                                            className="w-4 h-4 accent-sky-500 cursor-pointer disabled:cursor-not-allowed"
                                                                         />
                                                                     </td>
                                                                     <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{p.folio_i}</td>
@@ -584,7 +620,7 @@
                                                                     <td className="px-8 py-5 text-[11px] font-bold text-slate-500">{p.hora} - {p.fecha}</td>
                                                                     <td className="px-8 py-5"><span className="text-[10px] uppercase font-black tracking-widest bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">{p.status || 'LIBRE'}</span></td>
                                                                     <td className="px-8 py-5 text-right pr-12">
-                                                                        <button onClick={() => takePool(p.folio_i)} disabled={!canSelect && !isSelected} className="px-5 py-2.5 bg-sky-50 text-sky-600 rounded-xl uppercase text-[9px] font-black hover:bg-sky-100 transition-colors border border-sky-200 cursor-pointer disabled:opacity-40">Apartar</button>
+                                                                        <button onClick={() => takePool(p.folio_i)} disabled={!canSingleTake} className="px-5 py-2.5 bg-sky-50 text-sky-600 rounded-xl uppercase text-[9px] font-black hover:bg-sky-100 transition-colors border border-sky-200 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">Apartar</button>
                                                                     </td>
                                                                 </tr>
                                                             );

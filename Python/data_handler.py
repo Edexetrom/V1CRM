@@ -788,12 +788,14 @@ class DataHandler:
     TZ_MEX = pytz.timezone('America/Mexico_City')
 
     def _parse_timestamptz(self, ts_str):
-        """Parsea timestamptz de Supabase/Postgres (incluyendo offsets cortos como +00) de forma segura."""
+        """Parsea timestamptz de Supabase/Postgres (incluyendo offsets cortos +00 y decimales variables en Python 3.10)."""
         if not ts_str:
             return None
-        s = str(ts_str).strip().replace('Z', '+00:00')
+        s = str(ts_str).strip().replace(' ', 'T').replace('Z', '+00:00')
         if re.search(r'[+-]\d{2}$', s):
             s = s + ':00'
+        # Python 3.10 fromisoformat solo acepta 0, 3 o 6 dígitos en microsegundos; normalizamos a 6
+        s = re.sub(r'\.(\d+)', lambda m: '.' + (m.group(1) + '000000')[:6], s)
         dt = datetime.fromisoformat(s)
         if not dt.tzinfo:
             dt = self.TZ_MEX.localize(dt)
@@ -988,7 +990,7 @@ class DataHandler:
                 query = self.supabase.table("AGENDA_OBSOLETA") \
                     .select("folio_i, telefono, status, hora, fecha, updated_at")
                 if asesora_nombre:
-                    query = query.eq("status", f"BLOQUEADO_{asesora_nombre}")
+                    query = query.ilike("status", f"BLOQUEADO_{str(asesora_nombre).strip()}")
                 else:
                     query = query.like("status", "BLOQUEADO_%")
                 res = query.range(offset, offset + limit - 1).execute()
@@ -1072,11 +1074,12 @@ class DataHandler:
 
     def take_pool_client(self, lead_id, asesora_nombre):
         try:
-            tz_mex = pytz.timezone('America/Mexico_City')
+            tz_mex = self.TZ_MEX
             now_mx = datetime.now(tz_mex)
+            asesora_clean = str(asesora_nombre or '').strip()
             limit_check = self.supabase.table("AGENDA_OBSOLETA") \
                 .select("folio_i, updated_at") \
-                .eq("status", f"BLOQUEADO_{asesora_nombre}") \
+                .ilike("status", f"BLOQUEADO_{asesora_clean}") \
                 .execute()
             blocked_rows = limit_check.data or []
             if len(blocked_rows) >= 250:
@@ -1102,30 +1105,45 @@ class DataHandler:
             if not lead_check.data:
                 return {"status": "error", "message": "No encontrado", "code": 404}
             
-            st = (lead_check.data[0].get('status') or '').strip()
-            up = lead_check.data[0].get('updated_at')
             available = False
-            if st == 'ISABELA':
-                if up:
-                    try:
-                        dt = self._parse_timestamptz(up)
-                        if dt and (now_mx - dt) >= timedelta(hours=4):
+            st = ""
+            up = None
+            reject_reason = "El prospecto ya fue tomado"
+            for row in lead_check.data:
+                st = (row.get('status') or '').strip()
+                up = row.get('updated_at')
+                if st.upper() == 'ISABELA':
+                    if up:
+                        try:
+                            dt = self._parse_timestamptz(up)
+                            if dt and (now_mx - dt) >= timedelta(hours=4):
+                                available = True
+                                break
+                            else:
+                                reject_reason = "El prospecto aún no cumple las 4 horas para pasar al Pool."
+                        except Exception as parse_err:
+                            logger.error(f"TAKE POOL PARSE ERROR lead={lead_id} up={up}: {parse_err}")
                             available = True
-                    except Exception:
-                        pass
+                            break
+                    else:
+                        available = True
+                        break
+                elif st.upper().startswith('BLOQUEADO_'):
+                    if up:
+                        try:
+                            dt = self._parse_timestamptz(up)
+                            if dt and (now_mx - dt).days > 30:
+                                available = True
+                                break
+                        except Exception:
+                            pass
+                    reject_reason = f"El prospecto ya fue tomado ({st})."
                 else:
-                    available = True
-            elif st.startswith('BLOQUEADO_'):
-                if up:
-                    try:
-                        dt = self._parse_timestamptz(up)
-                        if dt and (now_mx - dt).days > 30:
-                            available = True
-                    except Exception:
-                        pass
+                    reject_reason = f"Prospecto no disponible (estado actual: {st or 'vacío'})."
             
             if not available:
-                return {"status": "error", "message": "El prospecto ya fue tomado", "code": 409}
+                logger.warning(f"TAKE POOL 409: lead={lead_id}, asesora={asesora_clean}, st='{st}', up='{up}', reason='{reject_reason}'")
+                return {"status": "error", "message": reject_reason, "code": 409}
                 
             self.supabase.table("AGENDA_OBSOLETA").update({
                 "status": f"BLOQUEADO_{asesora_nombre}",

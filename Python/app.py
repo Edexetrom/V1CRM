@@ -182,7 +182,10 @@ def get_journal_tail(): return jsonify(["[SISTEMA] Motor v1.10 Activo", "[DB] Si
 @app.route('/api/pool', methods=['GET'])
 def get_pool():
     asesora = request.args.get('asesora')
-    return jsonify(handler.get_pool_clients(asesora))
+    resp = jsonify(handler.get_pool_clients(asesora))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.route('/api/pool/take', methods=['POST', 'OPTIONS'])
 def take_pool():
