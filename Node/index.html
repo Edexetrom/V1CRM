@@ -1304,7 +1304,8 @@
             const [localForm, setLocalForm] = useState({ ...client });
             const [newPhotos, setNewPhotos] = useState([]);
             const [sending, setSending] = useState(false);
-            const isLocked = client['Estado Final'] === 'Venta' || client['Estado Final'] === 'No interesado';
+            const estadoNorm = (client['Estado Final'] || '').toString().trim().toLowerCase();
+            const isLocked = estadoNorm === 'venta' || estadoNorm === 'no interesado';
 
             const completedList = useMemo(() => {
                 let list = [];
@@ -1412,12 +1413,23 @@
                                 <button onClick={onClose} className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 hover:text-red-500 border-none transition-all outline-none cursor-pointer"><i className="fas fa-times text-lg"></i></button>
                             </div>
                         </div>
-                        <div className="chrome-tab-container">
+                        <div className="chrome-tab-container flex flex-wrap items-center gap-2 bg-slate-100/80 pt-3 px-6 border-b border-slate-200 shrink-0">
                             {['base', 'history', 'new', 'notes'].map(t => {
                                 if (t === 'new' && (isLocked || nextIdx > 30)) return null;
                                 const icons = { base: 'fa-id-card', history: 'fa-history', new: 'fa-edit', notes: 'fa-sticky-note' };
                                 const labels = { base: 'Expediente', history: 'Gestiones', new: 'Nuevo Seguimiento', notes: 'Auditoría' };
-                                return <button key={t} onClick={() => setTab(t)} className={`chrome-tab ${tab === t ? 'chrome-tab-active' : ''}`} style={tab === t ? { color: theme.primary } : {}}><i className={`fas ${icons[t]}`}></i> {labels[t]}</button>
+                                const isActive = tab === t;
+                                return (
+                                    <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => setTab(t)}
+                                        className={`chrome-tab px-5 py-3 text-[10px] font-extrabold uppercase tracking-widest rounded-t-xl flex items-center gap-2 cursor-pointer transition-all border-none outline-none ${isActive ? 'chrome-tab-active bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700 hover:bg-white/60 bg-transparent'}`}
+                                        style={isActive ? { color: theme.primary } : {}}
+                                    >
+                                        <i className={`fas ${icons[t]}`}></i> {labels[t]}
+                                    </button>
+                                );
                             })}
                         </div>
                         <div className="flex-1 p-12 overflow-y-auto custom-scroll bg-white">
@@ -1472,9 +1484,14 @@
                                 <textarea disabled={isLocked} className="w-full p-12 bg-slate-50 rounded-[4rem] font-medium text-sm h-full border-none shadow-inner outline-none disabled:opacity-50" placeholder="Notas internas..." value={localForm['Comentarios'] || ''} onChange={e => setLocalForm({ ...localForm, 'Comentarios': e.target.value })}></textarea>
                             </div>}
                         </div>
-                        <div className="p-10 bg-slate-50/30 border-t border-slate-50 flex gap-6">
-                            <button onClick={onClose} className="flex-1 py-5 text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all border-none outline-none cursor-pointer">Cerrar</button>
-                            {(!isLocked && tab !== 'base') && <button onClick={update} disabled={sending} className="flex-[2] py-5 rounded-3xl text-white font-black text-base shadow-2xl hover:brightness-110 uppercase tracking-widest transition-all border-none outline-none cursor-pointer" style={{ backgroundColor: theme.primary }}>{sending ? 'SINCRONIZANDO...' : 'Sincronizar Gestión'}</button>}
+                        <div className="p-8 bg-slate-50/30 border-t border-slate-100 flex flex-wrap gap-4 shrink-0">
+                            <button type="button" onClick={onClose} className="flex-1 py-4 text-slate-500 font-black uppercase text-[10px] tracking-widest hover:bg-slate-100 rounded-2xl transition-all border-none outline-none cursor-pointer">Cerrar</button>
+                            {(!isLocked && nextIdx <= 30 && tab === 'base') && (
+                                <button type="button" onClick={() => setTab('new')} className="flex-[2] py-4 rounded-3xl text-white font-black text-sm shadow-xl hover:brightness-110 uppercase tracking-widest transition-all border-none outline-none cursor-pointer flex items-center justify-center gap-2" style={{ backgroundColor: theme.primary }}>
+                                    <i className="fas fa-plus-circle"></i> Nuevo Seguimiento #{nextIdx}
+                                </button>
+                            )}
+                            {(!isLocked && tab !== 'base') && <button type="button" onClick={update} disabled={sending} className="flex-[2] py-4 rounded-3xl text-white font-black text-base shadow-2xl hover:brightness-110 uppercase tracking-widest transition-all border-none outline-none cursor-pointer" style={{ backgroundColor: theme.primary }}>{sending ? 'SINCRONIZANDO...' : 'Sincronizar Gestión'}</button>}
                         </div>
                     </div>
                 </div>

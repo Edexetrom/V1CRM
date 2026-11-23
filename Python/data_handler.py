@@ -847,7 +847,9 @@ class DataHandler:
                     hist_list = [profile.get('folio_r')]
                 profile['folios_r_list'] = hist_list
             return profile
-        except: return None
+        except Exception as e:
+            logger.error(f"GET FULL PROFILE ERROR ({p_id}): {e}")
+            return None
 
     def _reconstruir_objeto_prospecto(self, p, today_mx=None):
         p['id_db'] = p.get('id')
